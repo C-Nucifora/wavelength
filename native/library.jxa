@@ -1,0 +1,158 @@
+function normalize(value) {
+  return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().replace(/\s+/g, ' ');
+}
+
+function matches(metadata, expected) {
+  return normalize(metadata.title) === normalize(expected.title) &&
+    normalize(metadata.artist) === normalize(expected.artist) &&
+    normalize(metadata.album) === normalize(expected.album) &&
+    Math.abs(metadata.durationMs - expected.durationMs) <= 3000;
+}
+
+function historyError(error) {
+  var message = String(error.message || error);
+  var code = error.errorNumber || error.number || error.code;
+  if (code === -1743 || /1743|not authorized|not permitted/i.test(message)) return 'Music Automation permission denied (-1743).';
+  if (code === -1712 || /1712|timed out|timeout/i.test(message)) return 'Music automation timed out. Retry after closing any Music dialog.';
+  var safe = [
+    'Open Music and sign in to Apple Music before continuing.',
+    'Music has no readable library. Open Music and retry.',
+    'Music library exceeds 50,000 tracks.',
+    'Music returned an incomplete library snapshot. Retry.',
+    'Music library changed during the scan. Retry.',
+    'Invalid or duplicate Music library persistent ID.',
+    'Music library fields exceed 4,000 characters.'
+  ];
+  return safe.indexOf(message) !== -1 ? message : 'Could not read the Music library. Open Music and retry.';
+}
+
+function readHistoryColumns(tracks, ids, count) {
+  if (!Array.isArray(ids) || ids.length !== count) throw new Error('Music returned an incomplete library snapshot. Retry.');
+  var seen = Object.create(null);
+  for (var identityIndex = 0; identityIndex < count; identityIndex++) {
+    var id = ids[identityIndex];
+    if (typeof id !== 'string' || !/^[A-Fa-f0-9]{16}$/.test(id) || seen[id.toUpperCase()]) throw new Error('Invalid or duplicate Music library persistent ID.');
+    seen[id.toUpperCase()] = true;
+  }
+  function text(value) {
+    if (typeof value !== 'string') return null;
+    if (Array.from(value).length > 4000) throw new Error('Music library fields exceed 4,000 characters.');
+    return value.trim() ? value : null;
+  }
+  function number(value, integer) {
+    return typeof value === 'number' && isFinite(value) && value >= 0 && (!integer || Math.floor(value) === value) ? value : null;
+  }
+  function date(value) {
+    try {
+      var time = Date.prototype.getTime.call(value);
+      return isFinite(time) ? Date.prototype.toISOString.call(value) : null;
+    } catch (_) { return null; }
+  }
+  var properties = [
+    ['name', 'title', text], ['artist', 'artist', text], ['albumArtist', 'albumArtist', text],
+    ['album', 'album', text], ['genre', 'genre', text],
+    ['duration', 'durationMs', function(value) { return number(typeof value === 'number' ? value * 1000 : null); }],
+    ['playedCount', 'playedCount', function(value) { return number(value, true); }], ['playedDate', 'playedAt', date],
+    ['skippedCount', 'skippedCount', function(value) { return number(value, true); }], ['skippedDate', 'skippedAt', date],
+    ['dateAdded', 'addedAt', date], ['favorited', 'favorite', function(value) { return typeof value === 'boolean' ? value : null; }]
+  ];
+  var records = ids.map(function(id) { return {id: id}; });
+  var warnings = [];
+  properties.forEach(function(property) {
+    var values;
+    try {
+      values = typeof tracks[property[0]] === 'function' ? tracks[property[0]]() : null;
+    } catch (error) {
+      var message = String(error.message || error);
+      var code = error.errorNumber || error.number || error.code;
+      if (code && code !== -1708) throw error;
+      if (code !== -1708 && !/\(-1708\)|property (?:is )?(?:unavailable|not supported)/i.test(message)) throw error;
+      if (/1743|1712|1728|609|not authorized|not permitted|timeout|timed out|library|collection|disappear/i.test(message)) throw error;
+      values = null;
+    }
+    if (values === null || values === undefined) {
+      values = ids.map(function() { return null; });
+      warnings.push(property[1] + ' unavailable for ' + count + ' library tracks.');
+    } else if (!Array.isArray(values) || values.length !== count) {
+      throw new Error('Music returned an incomplete library snapshot. Retry.');
+    }
+    for (var index = 0; index < count; index++) records[index][property[1]] = property[2](values[index]);
+  });
+  return {complete: true, declaredTrackCount: count, tracks: records, warnings: warnings};
+}
+
+function run(argv) {
+  try {
+    var input = JSON.parse(argv[0]);
+    var Music = Application('Music');
+    if (!Music.running()) throw new Error('Open Music and sign in to Apple Music before continuing.');
+    function playlist(id) {
+      if (!/^[A-Fa-f0-9]{16}$/.test(id || '')) throw new Error('Invalid playlist ID.');
+      var result = Music.userPlaylists.whose({persistentID: id})();
+      if (result.length !== 1) throw new Error('The saved playlist no longer exists. Start a new playlist.');
+      return result[0];
+    }
+    var titleCache = Object.create(null);
+    function findTrack(expected) {
+      // Query by title first so a large library does not need to cross the Apple-event bridge.
+      var candidates = titleCache[expected.title];
+      if (!candidates) {
+        candidates = Music.libraryPlaylists[0].tracks.whose({name: expected.title})();
+        titleCache[expected.title] = candidates;
+      }
+      var found = candidates.filter(function(t) {
+        return matches({title: t.name(), artist: t.artist(), album: t.album(), durationMs: t.duration() * 1000}, expected);
+      });
+      return found.length ? found[0] : null;
+    }
+    var result;
+    if (input.action === 'ensure') {
+      var p = input.existingId ? playlist(input.existingId) : Music.make({new: 'playlist', withProperties: {name: input.name}});
+      result = {id: p.persistentID(), name: p.name()};
+    } else if (input.action === 'inspect') {
+      result = input.tracks.map(function(expected) {
+        var found = findTrack(expected);
+        return {id: expected.id, libraryId: found ? found.persistentID() : null};
+      });
+    } else if (input.action === 'find') {
+      if (input.playlistId) playlist(input.playlistId);
+      var t = findTrack(input.track);
+      result = {libraryId: t ? t.persistentID() : null};
+    } else if (input.action === 'insert') {
+      var target = playlist(input.playlistId);
+      var source = findTrack(input.track);
+      if (!source) throw new Error('The expected song is not in the Music library yet.');
+      var id = source.persistentID();
+      var alreadyPresent = target.tracks.whose({persistentID: id})().length > 0;
+      if (!alreadyPresent) Music.duplicate(source, {to: target});
+      if (!target.tracks.whose({persistentID: id})().length) throw new Error('Music did not confirm the song in the playlist.');
+      result = {libraryId: id, alreadyPresent: alreadyPresent};
+    } else if (input.action === 'open') {
+      var visible = playlist(input.playlistId);
+      Music.activate();
+      Music.reveal(visible);
+      result = {};
+    } else if (input.action === 'history') {
+      var libraries = Music.libraryPlaylists();
+      if (!libraries.length) throw new Error('Music has no readable library. Open Music and retry.');
+      var tracks = libraries[0].tracks;
+      var count = tracks.length;
+      if (count > 50000) throw new Error('Music library exceeds 50,000 tracks.');
+      if (!Number.isInteger(count) || count < 0) throw new Error('Music returned an incomplete library snapshot. Retry.');
+      var ids = tracks.persistentID();
+      result = readHistoryColumns(tracks, ids, count);
+      var finalLibraries = Music.libraryPlaylists();
+      if (!finalLibraries.length) throw new Error('Music has no readable library. Open Music and retry.');
+      var finalTracks = finalLibraries[0].tracks;
+      var finalIds = finalTracks.persistentID();
+      if (finalTracks.length !== count || !Array.isArray(finalIds) || finalIds.length !== count || ids.some(function(id, index) { return id !== finalIds[index]; })) {
+        throw new Error('Music library changed during the scan. Retry.');
+      }
+    } else {
+      throw new Error('Unknown Music action.');
+    }
+    return JSON.stringify({ok: true, result: result});
+  } catch (error) {
+    return JSON.stringify({ok: false, error: input && input.action === 'history' ? historyError(error) : String(error.message || error)});
+  }
+}

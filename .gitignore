@@ -1,0 +1,25 @@
+node_modules/
+.build/
+.data/
+*.sqlite*
+*.db*
+.DS_Store
+.env*
+cache/
+.wavelength-signing-identity
+
+# Captures, local credentials and private signing/archive material.
+*.har
+*.har.*
+*.p12
+*.pfx
+*.pem
+*.key
+*.keychain
+*.keychain-db
+*.mobileprovision
+*.provisionprofile
+*.xcarchive/
+*.app/
+.wavelength-signing/
+.wavelength-signing-identity.*

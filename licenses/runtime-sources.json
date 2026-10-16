@@ -1,0 +1,210 @@
+{
+  "runtime": "1.3.14+0d9b296af",
+  "unresolved": [],
+  "verification": {
+    "cleanRuntimeRebuild": "not run",
+    "modifiedLibraryRelink": "not run",
+    "rustToolchain": "Upstream uses nightly with rust-src without pinning the official build's nightly revision. Supplied Cargo dependency sources follow the exact c-api lockfile. Rust license reference text does not identify the compiler version.",
+    "webkitArchive": "Full git archive of the pinned commit; no selected-directory omissions. Upstream export-ignore metadata rules apply."
+  },
+  "files": [
+    {
+      "path": "webkit-full-source.tar.gz",
+      "revision": "5488984d20e0dbfe4be2c3ba8fb18eb81a5e0e8b",
+      "url": "https://github.com/oven-sh/WebKit/tree/5488984d20e0dbfe4be2c3ba8fb18eb81a5e0e8b",
+      "description": "Complete git archive from the exact upstream commit, prefix WebKit-5488984d20e0dbfe4be2c3ba8fb18eb81a5e0e8b/; gzip integrity checked; 1975782041 bytes",
+      "sha256": "7f8138b292ae20c8c79c54909dd30f861add023f4e3b7a6cde9afd6a3f752bfa"
+    },
+    {
+      "path": "zig-source.tar.gz",
+      "revision": "04e7f6ac1e009525bc00934f20199c68f04e0a24",
+      "url": "https://codeload.github.com/oven-sh/zig/tar.gz/04e7f6ac1e009525bc00934f20199c68f04e0a24",
+      "sha256": "b094c5f806d053896de897023b6c8ccb56903fb994c6f86dd44d848e760fe44d"
+    },
+    {
+      "path": "bun-1.3.14.tar.gz",
+      "revision": "0d9b296af33f2b851fcbf4df3e9ec89751734ba4",
+      "url": "https://codeload.github.com/oven-sh/bun/tar.gz/0d9b296af33f2b851fcbf4df3e9ec89751734ba4",
+      "sha256": "aa045c1f3ddd3eb41ed8452d8a73eaab3b3322386416ebb1b160a6af6978d3e5"
+    },
+    {
+      "path": "node-v24.3.0-headers.tar.gz",
+      "revision": "24.3.0",
+      "url": "https://nodejs.org/dist/v24.3.0/node-v24.3.0-headers.tar.gz",
+      "sha256": "045e9bf477cd5db0ec67f8c1a63ba7f784dedfe2c581e3d0ed09b88e9115dd07"
+    },
+    {
+      "path": "npm-fallback-sources.tar.gz",
+      "revision": "src/node-fallbacks/bun.lock at Bun 0d9b296af33f2b851fcbf4df3e9ec89751734ba4",
+      "description": "128 npm package tarballs, lockfile integrity checked; inventory inside",
+      "sha256": "391190ca620343f08f41c187608989491bbe465ae7a500a07ba0dd8590e88a57"
+    },
+    {
+      "path": "lolhtml-cargo-sources.tar.gz",
+      "revision": "lol-html 77127cd2b8545998756e8d64e36ee2313c4bb312 c-api/Cargo.lock",
+      "description": "43 Cargo crates from cargo vendor --locked; checksums and licenses included",
+      "sha256": "3228c5b45636be6e53dc1b28cd2b09dfc1b4b9e18c86880a01a997d3baedf0c0"
+    },
+    {
+      "name": "libdeflate",
+      "repo": "ebiggers/libdeflate",
+      "revision": "c8c56a20f8f621e6a966b716b31f1dedab6a41e3",
+      "url": "https://codeload.github.com/ebiggers/libdeflate/tar.gz/c8c56a20f8f621e6a966b716b31f1dedab6a41e3",
+      "path": "dependencies/libdeflate.tar.gz",
+      "sha256": "1e5cc06bdbf3e1245d8b89c9e3588f507e3c8bc53fe8b8229770a9e8661dea81"
+    },
+    {
+      "name": "picohttpparser",
+      "repo": "h2o/picohttpparser",
+      "revision": "066d2b1e9ab820703db0837a7255d92d30f0c9f5",
+      "url": "https://codeload.github.com/h2o/picohttpparser/tar.gz/066d2b1e9ab820703db0837a7255d92d30f0c9f5",
+      "path": "dependencies/picohttpparser.tar.gz",
+      "sha256": "637ff2ab6f5c7f7e05a5b5dc393d5cf2fea8d4754fcaceaaf935ffff5c1323ee"
+    },
+    {
+      "name": "libspng",
+      "repo": "randy408/libspng",
+      "revision": "fb768002d4288590083a476af628e51c3f1d47cd",
+      "url": "https://codeload.github.com/randy408/libspng/tar.gz/fb768002d4288590083a476af628e51c3f1d47cd",
+      "path": "dependencies/libspng.tar.gz",
+      "sha256": "d656813290d70a750b69e768323ff3b3875adf8c2e8c2fdb4e57ca1467abf86a"
+    },
+    {
+      "name": "zstd",
+      "repo": "facebook/zstd",
+      "revision": "f8745da6ff1ad1e7bab384bd1f9d742439278e99",
+      "url": "https://codeload.github.com/facebook/zstd/tar.gz/f8745da6ff1ad1e7bab384bd1f9d742439278e99",
+      "path": "dependencies/zstd.tar.gz",
+      "sha256": "4b0bd1f0cfb25e61b9103c35f27395530ff5b4c0d2513a00fd745849e85ea52c"
+    },
+    {
+      "name": "lshpack",
+      "repo": "litespeedtech/ls-hpack",
+      "revision": "8905c024b6d052f083a3d11d0a169b3c2735c8a1",
+      "url": "https://codeload.github.com/litespeedtech/ls-hpack/tar.gz/8905c024b6d052f083a3d11d0a169b3c2735c8a1",
+      "path": "dependencies/lshpack.tar.gz",
+      "sha256": "07d8bf901bb1b15543f38eabd23938519e1210eebadb52f3d651d6ef130ef973"
+    },
+    {
+      "name": "brotli",
+      "repo": "google/brotli",
+      "revision": "v1.1.0",
+      "url": "https://codeload.github.com/google/brotli/tar.gz/v1.1.0",
+      "path": "dependencies/brotli.tar.gz",
+      "sha256": "e720a6ca29428b803f4ad165371771f5398faba397edf6778837a18599ea13ff"
+    },
+    {
+      "name": "lolhtml",
+      "repo": "cloudflare/lol-html",
+      "revision": "77127cd2b8545998756e8d64e36ee2313c4bb312",
+      "url": "https://codeload.github.com/cloudflare/lol-html/tar.gz/77127cd2b8545998756e8d64e36ee2313c4bb312",
+      "path": "dependencies/lolhtml.tar.gz",
+      "sha256": "2c53161edf633fa99acfc4eafddbafd5d9b8199f0918a1cc9152cb6c2c9bf379"
+    },
+    {
+      "name": "highway",
+      "repo": "google/highway",
+      "revision": "2607d3b5b0113992fe84d3848859eae13b3b52c1",
+      "url": "https://codeload.github.com/google/highway/tar.gz/2607d3b5b0113992fe84d3848859eae13b3b52c1",
+      "path": "dependencies/highway.tar.gz",
+      "sha256": "741d705781e0b3e406beda8f1f994fbae01321237ce8023a1ad90fbaf7940c25"
+    },
+    {
+      "name": "libuv",
+      "repo": "oven-sh/libuv",
+      "revision": "4dcfac4780d394e0dc2d3fb30335ca01b553eb46",
+      "url": "https://codeload.github.com/oven-sh/libuv/tar.gz/4dcfac4780d394e0dc2d3fb30335ca01b553eb46",
+      "path": "dependencies/libuv.tar.gz",
+      "sha256": "2b6626b3df296494deee71c2e3000fac8a5032fa2b2018f1317753e3bcb30f59"
+    },
+    {
+      "name": "tinycc",
+      "repo": "oven-sh/tinycc",
+      "revision": "12882eee073cfe5c7621bcfadf679e1372d4537b",
+      "url": "https://codeload.github.com/oven-sh/tinycc/tar.gz/12882eee073cfe5c7621bcfadf679e1372d4537b",
+      "path": "dependencies/tinycc.tar.gz",
+      "sha256": "6b50485fcbbfa90a99c56e8e2b6a92014dcd34377d5edb23e1938dc9ec96f0aa"
+    },
+    {
+      "name": "zlib",
+      "repo": "zlib-ng/zlib-ng",
+      "revision": "12731092979c6d07f42da27da673a9f6c7b13586",
+      "url": "https://codeload.github.com/zlib-ng/zlib-ng/tar.gz/12731092979c6d07f42da27da673a9f6c7b13586",
+      "path": "dependencies/zlib.tar.gz",
+      "sha256": "a0d2a5d122c84b56a793a1553a9c3327fb2eb7469bf7a86b79e3c7be5d92e8d6"
+    },
+    {
+      "name": "boringssl",
+      "repo": "oven-sh/boringssl",
+      "revision": "0c5fce43b7ed5eb6001487ee48ac65766f5ddcd1",
+      "url": "https://codeload.github.com/oven-sh/boringssl/tar.gz/0c5fce43b7ed5eb6001487ee48ac65766f5ddcd1",
+      "path": "dependencies/boringssl.tar.gz",
+      "sha256": "a414b1d105fef105697b7428c0be5f7fc67489849eaa276931ae8344d78a99b8"
+    },
+    {
+      "name": "lsquic",
+      "repo": "litespeedtech/lsquic",
+      "revision": "3181911301b1aa4f54c1ed690901abc674ee08fb",
+      "url": "https://codeload.github.com/litespeedtech/lsquic/tar.gz/3181911301b1aa4f54c1ed690901abc674ee08fb",
+      "path": "dependencies/lsquic.tar.gz",
+      "sha256": "f8cb90fb327eb91597c23163bf596c0d1882560be35b661d9ba84891cc461735"
+    },
+    {
+      "name": "mimalloc",
+      "repo": "oven-sh/mimalloc",
+      "revision": "f15aecb94fc8096008bf87b90c53ed682026914a",
+      "url": "https://codeload.github.com/oven-sh/mimalloc/tar.gz/f15aecb94fc8096008bf87b90c53ed682026914a",
+      "path": "dependencies/mimalloc.tar.gz",
+      "sha256": "d98b7f315f16b82cd43b7e36a7e1f73ceae9422f8bba8ebb99899c78a54277fc"
+    },
+    {
+      "name": "libjpeg-turbo",
+      "repo": "libjpeg-turbo/libjpeg-turbo",
+      "revision": "e352b02f794f701407b39af08576035ba3360d60",
+      "url": "https://codeload.github.com/libjpeg-turbo/libjpeg-turbo/tar.gz/e352b02f794f701407b39af08576035ba3360d60",
+      "path": "dependencies/libjpeg-turbo.tar.gz",
+      "sha256": "440f3a94390c78eab88f74b92944d2f6b248e592e984412e389885dfb5796bf0"
+    },
+    {
+      "name": "libwebp",
+      "repo": "webmproject/libwebp",
+      "revision": "b7e29b9d75bd31422b00c2a446d49d7af06c328d",
+      "url": "https://codeload.github.com/webmproject/libwebp/tar.gz/b7e29b9d75bd31422b00c2a446d49d7af06c328d",
+      "path": "dependencies/libwebp.tar.gz",
+      "sha256": "76fb89b4454ff2161bb0cca2cf832e19b8b4001b0ef42fbcc2b4a437c945b2b6"
+    },
+    {
+      "name": "cares",
+      "repo": "c-ares/c-ares",
+      "revision": "3ac47ee46edd8ea40370222f91613fc16c434853",
+      "url": "https://codeload.github.com/c-ares/c-ares/tar.gz/3ac47ee46edd8ea40370222f91613fc16c434853",
+      "path": "dependencies/cares.tar.gz",
+      "sha256": "8c94116cb366ae4a44e487da4d9f7e736287d329efa6f88fdf077cd2d0a2e4b8"
+    },
+    {
+      "name": "lsqpack",
+      "repo": "litespeedtech/ls-qpack",
+      "revision": "1e9c5b8e59f8161c54f168a570c8bfdc59ded0c3",
+      "url": "https://codeload.github.com/litespeedtech/ls-qpack/tar.gz/1e9c5b8e59f8161c54f168a570c8bfdc59ded0c3",
+      "path": "dependencies/lsqpack.tar.gz",
+      "sha256": "e9d8abe5b7c1e35b9908a9521e2acd7c1d17547babc01d73c7297e02aebbcc2d"
+    },
+    {
+      "name": "hdrhistogram",
+      "repo": "HdrHistogram/HdrHistogram_c",
+      "revision": "be60a9987ee48d0abf0d7b6a175bad8d6c1585d1",
+      "url": "https://codeload.github.com/HdrHistogram/HdrHistogram_c/tar.gz/be60a9987ee48d0abf0d7b6a175bad8d6c1585d1",
+      "path": "dependencies/hdrhistogram.tar.gz",
+      "sha256": "811c5e5ae5303a75ade50688880af6aad5d2f951ec5785f68186bd18635cdfc9"
+    },
+    {
+      "name": "libarchive",
+      "repo": "libarchive/libarchive",
+      "revision": "ded82291ab41d5e355831b96b0e1ff49e24d8939",
+      "url": "https://codeload.github.com/libarchive/libarchive/tar.gz/ded82291ab41d5e355831b96b0e1ff49e24d8939",
+      "path": "dependencies/libarchive.tar.gz",
+      "sha256": "042f0efe7147063ff9ba10f1a38ed080e949bcbd04bdbf3592b8846dd11b1da2"
+    }
+  ]
+}
+

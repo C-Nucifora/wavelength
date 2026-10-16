@@ -1,0 +1,22 @@
+name: Check
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - run: bun install --frozen-lockfile
+      - run: bun test
+      - run: bun run typecheck
+      - run: node --check public/app.js
+      - run: mkdir -p .build && xcrun swiftc native/MusicBridge.swift -o .build/MusicBridge
+      - run: bun run test:native
+      - run: bun scripts/check-web-music.ts
+      - run: bun scripts/check-artwork.ts
+      - run: bun experimental/web-session-probe/auth-wrapper/check.ts
+      - run: bun run build:app
