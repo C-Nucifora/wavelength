@@ -107,6 +107,14 @@ function summary(envelope: HistoryEnvelope, now: number): HistorySourceSummary {
   const coverage: HistoryCoverage = { ...envelope.coverage, missing: { ...envelope.coverage.missing },
     availableFields: [...envelope.coverage.availableFields], warnings: [...envelope.coverage.warnings] };
   if (envelope.source === "library") {
+    // Reclassify saved snapshots too, without requiring another Music scan.
+    coverage.warnings = coverage.warnings.filter(warning => !/^(playedAt|skippedAt|artist|albumArtist|album|genre) unavailable for \d+ library tracks\.$/.test(warning));
+    const missingMetadata = envelope.records.filter(track => [track.artist, track.albumArtist, track.album, track.genre].some(value => value === null)).length;
+    if (missingMetadata) coverage.warnings.push(`Music supplied incomplete artist, album artist, album or genre metadata for ${missingMetadata} library entries. These entries are kept. Rankings use the metadata Music supplied.`);
+    for (const [countField, dateField, label] of [["playedCount", "playedAt", "plays"], ["skippedCount", "skippedAt", "skips"]] as const) {
+      const count = envelope.records.filter(track => (track[countField] ?? 0) > 0 && track[dateField] === null).length;
+      if (count) coverage.warnings.push(`Music reports ${label} but no last ${label === "plays" ? "played" : "skipped"} date for ${count} library entries. Their counts are included; their dates remain unavailable.`);
+    }
     for (const field of ["playedCount", "skippedCount", "favorite"] as const) {
       const missing = envelope.records.filter(track => track[field] === null).length;
       const warning = `${field} unavailable for ${missing} library tracks.`;

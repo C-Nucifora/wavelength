@@ -83,8 +83,16 @@ export function normalizeLibraryRead(value: unknown): LibraryReadResult {
     return normalized;
   });
   const warnings = [...missing].map(([field, count]) => `${field} unavailable for ${count} library tracks.`);
-  // Bridge warnings are counted without retaining arbitrary bridge text.
-  if (Array.isArray(input.warnings) && input.warnings.length) warnings.push(`Library scan reported ${input.warnings.length} warnings.`);
+  // Known missing-field notices already appear above. Keep unknown bridge text private.
+  if (Array.isArray(input.warnings)) {
+    const unknownWarnings = input.warnings.reduce((count: number, warning: unknown) => {
+      if (typeof warning === "string" && warnings.includes(warning)) return count;
+      const aggregate = typeof warning === "string" ? /^Library scan reported ([1-9]\d*) warnings\.$/.exec(warning) : null;
+      const value = aggregate ? Number(aggregate[1]) : 1;
+      return Math.min(Number.MAX_SAFE_INTEGER, count + (Number.isSafeInteger(value) ? value : 1));
+    }, 0);
+    if (unknownWarnings) warnings.push(`Library scan reported ${unknownWarnings} warnings.`);
+  }
   return { complete: true, declaredTrackCount: tracks.length, tracks, warnings };
 }
 
