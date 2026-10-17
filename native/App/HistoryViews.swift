@@ -105,7 +105,7 @@ private struct HistorySourceDetails: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(source.sourceLabel).font(.headline)
             Text("\(source.source == "library" ? "Captured" : "Imported") \(HistoryDate(kind: "instant", value: source.savedAt).displayText)").font(.caption)
-            Text("\(source.totals.tracks) tracks · \(source.totals.artists) artists · \(source.totals.albums) albums").font(.caption)
+            Text("\(source.totals.tracks) \(source.source == "library" ? "tracks in rankings" : "tracks") · \(source.totals.artists) artists · \(source.totals.albums) albums").font(.caption)
             if source.source == "library" {
                 Text("Library play count: \(totalsRow.metricText(for: "libraryPlayCount")) · Skip count: \(totalsRow.metricText(for: "skippedCount")) · Favourites: \(totalsRow.metricText(for: "favoriteTracks"))").font(.caption)
                 Text("Current library metadata and cumulative counts, including zero-play tracks. Last played is the latest supplied date. Counts cannot reconstruct listening dates or minutes.").font(.caption).foregroundStyle(Palette.muted)
@@ -113,22 +113,50 @@ private struct HistorySourceDetails: View {
                 Text("\(source.metricLabel): \(totalsRow.metricText(for: "activityRecords")) · Reported play duration: \(totalsRow.metricText(for: "reportedDurationMs"))").font(.caption)
                 Text(source.profile == "recently-played" ? "Recently played records show last-seen tracks, not individual listening events. No timeline is available." : "Observed export records cover only the supplied file. Missing durations remain unavailable; track length is never counted as listening time.").font(.caption).foregroundStyle(Palette.muted)
             }
-            HistoryCoverageView(coverage: source.coverage)
+            HistoryCoverageView(coverage: source.coverage, isLibrary: source.source == "library")
         }.textSelection(.enabled)
     }
 }
 
 private struct HistoryCoverageView: View {
     let coverage: HistoryCoverage
+    var isLibrary = false
+    private var scanNotices: [String] { coverage.warnings.filter { $0.hasPrefix("Library scan reported ") } }
+    private var dataNotes: [String] { coverage.warnings.filter { !$0.hasPrefix("Library scan reported ") } }
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("\(coverage.acceptedRows) accepted / \(coverage.inputRows) input rows · \(coverage.rejectedRows) rejected").font(.caption)
-            Text("Available fields: \(coverage.availableFields.isEmpty ? "Unavailable" : coverage.availableFields.joined(separator: ", "))").font(.caption)
-            Text("Missing fields: artist \(coverage.missing.artist), album \(coverage.missing.album), genre \(coverage.missing.genre), date \(coverage.missing.date), reported duration \(coverage.missing.reportedDurationMs), media duration \(coverage.missing.mediaDurationMs).").font(.caption)
-            Text("First observed: \(coverage.firstDate?.displayText ?? "Unavailable")\nLast observed: \(coverage.lastDate?.displayText ?? "Unavailable")").font(.caption)
-            Text("\(coverage.datedRows) dated rows, \(coverage.instantRows) resolved instants, \(coverage.durationRows) rows with reported duration. \(coverage.enrichedRows) exact library enrichments, \(coverage.unmatchedRows) unmatched rows. Genre uses supplied or exact-enriched metadata.").font(.caption)
-            ForEach(Array(coverage.warnings.enumerated()), id: \.offset) { _, warning in Text(warning).font(.caption).foregroundStyle(Palette.iris) }
+            if isLibrary {
+                Text("\(coverage.acceptedRows) of \(coverage.inputRows) library entries read · \(coverage.rejectedRows) rejected").font(.caption)
+                Text("Entries with matching track metadata share a group in the rankings. Tracks with no plays or skips may have no event date. Music does not supply listening minutes in a library snapshot.").font(.caption)
+                if coverage.warnings.isEmpty {
+                    Text("No library data issues found.").font(.caption)
+                } else {
+                    ForEach(Array(dataNotes.enumerated()), id: \.offset) { _, warning in Text(warning).font(.caption) }
+                    if !scanNotices.isEmpty { Text("Music reported scan notices. Review Snapshot details before relying on this snapshot.").font(.caption) }
+                }
+                DisclosureGroup("Snapshot details") { details }
+            } else {
+                details
+                ForEach(Array(coverage.warnings.enumerated()), id: \.offset) { _, warning in Text(warning).font(.caption).foregroundStyle(Palette.iris) }
+            }
         }.foregroundStyle(Palette.muted).textSelection(.enabled)
+    }
+    private var details: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if !isLibrary {
+                Text("\(coverage.acceptedRows) accepted / \(coverage.inputRows) input rows · \(coverage.rejectedRows) rejected").font(.caption)
+            }
+            Text("Available fields: \(coverage.availableFields.isEmpty ? "Unavailable" : coverage.availableFields.joined(separator: ", "))").font(.caption)
+            if isLibrary {
+                ForEach(Array(scanNotices.enumerated()), id: \.offset) { _, warning in Text(warning).font(.caption) }
+                Text("Missing metadata: artist \(coverage.missing.artist), album \(coverage.missing.album), genre \(coverage.missing.genre), track length \(coverage.missing.mediaDurationMs). Last played date unavailable for \(coverage.missing.date) entries.").font(.caption)
+                Text("Earliest supplied last played date: \(coverage.firstDate?.displayText ?? "Unavailable")\nLatest supplied last played date: \(coverage.lastDate?.displayText ?? "Unavailable")").font(.caption)
+            } else {
+                Text("Missing fields: artist \(coverage.missing.artist), album \(coverage.missing.album), genre \(coverage.missing.genre), date \(coverage.missing.date), reported duration \(coverage.missing.reportedDurationMs), media duration \(coverage.missing.mediaDurationMs).").font(.caption)
+                Text("First observed: \(coverage.firstDate?.displayText ?? "Unavailable")\nLast observed: \(coverage.lastDate?.displayText ?? "Unavailable")").font(.caption)
+                Text("\(coverage.datedRows) dated rows, \(coverage.instantRows) resolved instants, \(coverage.durationRows) rows with reported duration. \(coverage.enrichedRows) exact library enrichments, \(coverage.unmatchedRows) unmatched rows. Genre uses supplied or exact-enriched metadata.").font(.caption)
+            }
+        }
     }
 }
 
