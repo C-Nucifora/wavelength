@@ -8,9 +8,9 @@ const sources = ["Types", "ArtworkTypes", "ArtworkRenderer", "ArtworkStore", "Ar
 try {
   await mkdir(".build", {recursive: true});
   for (const command of [
-    ["/usr/bin/xcrun", "swiftc", "-parse-as-library", "-warnings-as-errors", "-target", target, ...sources, "native/Tests/WebMusicChecks.swift", "-o", join(fixture, "WebMusicChecks")],
+    ["/usr/bin/xcrun", "swiftc", "-parse-as-library", "-warnings-as-errors", "-import-objc-header", "native/WebMusic/KeychainInteraction.h", "-target", target, ...sources, "native/Tests/WebMusicChecks.swift", "-o", join(fixture, "WebMusicChecks")],
     [join(fixture, "WebMusicChecks")],
-    ["/usr/bin/xcrun", "swiftc", "-parse-as-library", "-warnings-as-errors", "-target", target, ...sources, "native/WebMusic/Main.swift", "-o", join(fixture, "WebMusicBridge")],
+    ["/usr/bin/xcrun", "swiftc", "-parse-as-library", "-warnings-as-errors", "-import-objc-header", "native/WebMusic/KeychainInteraction.h", "-target", target, ...sources, "native/WebMusic/Main.swift", "-o", join(fixture, "WebMusicBridge")],
     ["/usr/bin/codesign", "--force", "--sign", "-", join(fixture, "WebMusicBridge")],
     ["/usr/bin/codesign", "--verify", "--strict", join(fixture, "WebMusicBridge")],
   ]) {
@@ -21,6 +21,7 @@ try {
     ['{"action":"not-an-operation","credentials":{"bearer":"fixture-secret","user":"fixture-user"}}', []],
     ['{"action":"status"}', ["fixture-secret"]],
     ['{"action":"status","unknown":"fixture-secret"}', []],
+    ['{"action":"authorizeConnection","generation":"fixture-secret"}', []],
     ['{"action":"status","jobId":null}', []],
     ['{"action":"status","coverMode":null}', []],
     ['{"action":"playlistCover","position":null}', []],

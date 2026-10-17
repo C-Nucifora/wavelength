@@ -501,6 +501,11 @@ final class WebFixtureProtocol: URLProtocol {
             _ = try await WebMusicService(store: saveFailureStore, lock: FakeWebLock(), transport: FakeWebTransport([(403, "fake-token-secret")])).handle(WebMusicRequest(action: "saveConnection", generation: record.generation, credentials: parsed))
             throw NSError(domain: "failed save accepted", code: 1)
         } catch let error as WebMusicError { try expect(error.code == "rejected" && saveFailureStore.saves == 0, "failed candidate validation preserves saved record") }
+        let authorizationNetworkCalls = network.requests.count
+        let authorized = try await service.handle(WebMusicRequest(action: "authorizeConnection"))
+        try expect(authorized["generation"] as? String == record.generation && network.requests.count == authorizationNetworkCalls, "Explicit authorization returns the current saved generation without a network request")
+        let authorizationJSON = String(decoding: try JSONSerialization.data(withJSONObject: authorized), as: UTF8.self)
+        try expect(!authorizationJSON.contains(record.credentials.bearer) && !authorizationJSON.contains(record.credentials.user), "Authorization never returns saved session credentials")
         var keychainCalls: [WebKeychainOperation] = []
         let keychain = WebKeychainStorage { operation, query, attributes in
             precondition(query[kSecAttrService as String] as? String == "local.wavelength.apple-music.web-session.v1")

@@ -41,7 +41,7 @@ typealias Credentials = WebCredentials
         busy = true; error = nil
         defer { busy = false }
         do {
-            let initial = try await invoke(["action": "status"])
+            let initial = try await invoke(["action": "authorizeConnection"])
             var current = try JSONDecoder().decode(MusicStatus.self, from: JSONSerialization.data(withJSONObject: initial))
             status = current
             if let generation = current.generation {
@@ -51,7 +51,7 @@ typealias Credentials = WebCredentials
                 current.message = "Apple Music connection checked."
             }
             status = current
-        } catch { self.error = "The Apple Music connection could not be checked. Reconnect if the session has expired." }
+        } catch { self.error = "The Apple Music connection could not be checked. If Keychain asks, choose Always Allow for Wavelength. Reconnect if the session has expired." }
     }
     func disconnect(expectedGeneration: String?) async {
         guard !busy else { return }

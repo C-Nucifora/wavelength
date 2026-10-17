@@ -12,7 +12,7 @@ final class WebMusicService {
     private func catalogID(_ value: String) -> Bool { valid(value, "^[0-9]{1,20}$") }
     private func playlistID(_ value: String) -> Bool { valid(value, "^[A-Za-z0-9][A-Za-z0-9.-]{0,127}$") }
     private func validate(_ request: WebMusicRequest) throws {
-        guard ["status", "checkConnection", "inspectTracks", "ensurePlaylist", "addTrackToPlaylist", "rebindPlaylist", "playlistCover", "saveConnection", "disconnect", "catalogArtists", "catalogReleases", "catalogTracks"].contains(request.action),
+        guard ["status", "authorizeConnection", "checkConnection", "inspectTracks", "ensurePlaylist", "addTrackToPlaylist", "rebindPlaylist", "playlistCover", "saveConnection", "disconnect", "catalogArtists", "catalogReleases", "catalogTracks"].contains(request.action),
               request.generation == nil || UUID(uuidString: request.generation!) != nil,
               request.jobId == nil || UUID(uuidString: request.jobId!) != nil,
               request.jobId == nil || ["ensurePlaylist", "playlistCover"].contains(request.action),
@@ -61,7 +61,7 @@ final class WebMusicService {
         try validate(request)
         try lock.acquire(); defer { lock.release() }
         let current = try record()
-        if request.action == "status" { return status(current) }
+        if request.action == "status" || request.action == "authorizeConnection" { return status(current) }
         guard request.generation == current?.generation else { throw WebMusicError.generationChanged }
         if request.action == "disconnect" {
             do { try store.delete() } catch { throw WebMusicError.storage }

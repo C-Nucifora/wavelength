@@ -1,5 +1,6 @@
 import Foundation
 import Darwin
+import Security
 
 @main struct WebMusicBridge {
     static func main() async {
@@ -13,7 +14,9 @@ import Darwin
                 guard input.count <= 128 * 1024 else { throw WebMusicError.invalidInput }
             }
             let request = try WebMusicRequest.decode(input)
-            let service = WebMusicService(store: WebKeychainStorage(allowInteraction: request.action == "saveConnection"), lock: WebFileLock(), transport: WebURLSessionTransport(), artwork: NativeArtworkService())
+            let allowInteraction = request.action == "saveConnection" || request.action == "authorizeConnection"
+            guard WavelengthSetKeychainInteractionAllowed(allowInteraction) == errSecSuccess else { throw WebMusicError.storage }
+            let service = WebMusicService(store: WebKeychainStorage(allowInteraction: allowInteraction), lock: WebFileLock(), transport: WebURLSessionTransport(), artwork: NativeArtworkService())
             envelope = ["ok": true, "result": try await service.handle(request)]
         } catch let error as WebMusicError { envelope = error.envelope }
         catch { envelope = WebMusicError.unavailable.envelope }

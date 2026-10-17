@@ -48,6 +48,7 @@ struct WebMusicRequest: Decodable {
         guard !input.isEmpty, input.count <= 128 * 1024,
               let object = try? JSONSerialization.jsonObject(with: input) as? [String: Any],
               Set(object.keys).isSubset(of: allowedKeys), let action = object["action"] as? String,
+              action != "authorizeConnection" || Set(object.keys) == ["action"],
               object["jobId"] == nil || ["ensurePlaylist", "playlistCover"].contains(action),
               object["coverMode"] == nil || action == "playlistCover",
               action != "playlistCover" || (object["position"] == nil && object["reconcileOnly"] == nil) else { throw WebMusicError.invalidInput }
@@ -75,7 +76,7 @@ struct WebMusicError: Error, Equatable, LocalizedError {
     static let catalogDate = WebMusicError(code: "catalog-date", message: "A release has no valid full Apple release date. Its chronological order cannot be verified.")
     static let busy = WebMusicError(code: "busy", message: "An Apple Music operation is in progress. Try again when it finishes.")
     static let missing = WebMusicError(code: "missing", message: "The Apple Music connection or requested resource is missing.")
-    static let storage = WebMusicError(code: "storage", message: "Wavelength could not access its saved Apple Music connection.")
+    static let storage = WebMusicError(code: "storage", message: "Wavelength could not access its saved Apple Music connection. Use Check connection to allow Keychain access.")
     static let rejected = WebMusicError(code: "rejected", message: "Apple rejected the connection. Reconnect to Apple Music.")
     static let malformed = WebMusicError(code: "malformed", message: "Apple returned an unexpected response.")
     static let transport = WebMusicError(code: "transport", message: "The Apple Music request did not complete.")

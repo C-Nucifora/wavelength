@@ -165,6 +165,7 @@ private struct ConnectionPanel: View {
                     Button("Validate and save locally") { Task { await model.connectionAction("save") } }.disabled(!model.canManageConnection || connection.bearerInput.isEmpty || connection.userInput.isEmpty)
                 }
                 if let error = connection.error { Text(error).foregroundStyle(.orange) }
+                Text("If Keychain asks for access, choose Always Allow to remember Wavelength. Check connection requests access; background work never opens a Keychain prompt.")
                 Text("Local Music history scans still need Automation permission. They do not add songs.")
             }.font(.caption).foregroundStyle(Palette.muted).padding(.top, 5)
         }.font(.caption).foregroundStyle(Palette.muted)

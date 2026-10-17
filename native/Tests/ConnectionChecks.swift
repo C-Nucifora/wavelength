@@ -64,7 +64,7 @@ enum ConnectionChecks {
         precondition(model.preflight == nil, "Stale generation must not enable Create")
         var checks: [String] = []
         let refreshed = MusicConnection(invoke: { input in
-            if input["action"] as? String == "status" { return ["platform": "darwin", "running": false, "accessibility": false, "automation": "unknown", "message": "Saved", "backend": "web-session", "connection": "saved", "generation": "g2"] }
+            if input["action"] as? String == "authorizeConnection" { return ["platform": "darwin", "running": false, "accessibility": false, "automation": "unknown", "message": "Saved", "backend": "web-session", "connection": "saved", "generation": "g2"] }
             let generation = input["generation"] as? String ?? ""
             checks.append(generation)
             guard generation == "g2" else { throw AppError(message: "Changed") }
@@ -76,7 +76,7 @@ enum ConnectionChecks {
         var generation = "g2"
         var racingChecks: [String] = []
         let racing = MusicConnection(invoke: { input in
-            if input["action"] as? String == "status" { return ["platform": "darwin", "running": false, "accessibility": false, "automation": "unknown", "message": "Saved", "backend": "web-session", "connection": "saved", "generation": generation] }
+            if input["action"] as? String == "authorizeConnection" { return ["platform": "darwin", "running": false, "accessibility": false, "automation": "unknown", "message": "Saved", "backend": "web-session", "connection": "saved", "generation": generation] }
             let requested = input["generation"] as? String ?? ""
             racingChecks.append(requested)
             if generation == "g2" { generation = "g3"; throw AppError(message: "Changed again") }
@@ -89,7 +89,7 @@ enum ConnectionChecks {
         precondition(racing.status?.generation == "g3" && racing.error == nil && racingChecks == ["g2", "g3"], "The next explicit check must recover after a second replacement")
         var removalReads = 0
         let removed = MusicConnection(invoke: { input in
-            precondition(input["action"] as? String == "status", "Missing saved session must start no authenticated request")
+            precondition(input["action"] as? String == "authorizeConnection", "Missing saved session must start no authenticated request")
             removalReads += 1
             return ["platform": "darwin", "running": false, "accessibility": false, "automation": "unknown", "message": "Connect", "backend": "web-session", "connection": "missing"]
         })

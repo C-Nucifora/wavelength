@@ -43,7 +43,7 @@ const sources = (await readdir(join(root, "native/App"))).filter(name => name.en
 sources.push(...["Types", "ArtworkTypes", "ArtworkRenderer", "ArtworkStore"].map(name => join(root, "native/WebMusic", name + ".swift")));
 sources.push(...["WrapperPolicy", "WrapperCapture", "WrapperWebView"].map(name => join(root, "experimental/web-session-probe/auth-wrapper", name + ".swift")));
 await run(["/usr/bin/xcrun", "swiftc", "-parse-as-library", "-warnings-as-errors", "-target", target, ...sources, "-o", join(contents, "MacOS/Wavelength")]);
-await run(["/usr/bin/xcrun", "swiftc", "-parse-as-library", "-warnings-as-errors", "-target", target, ...["Types", "ArtworkTypes", "ArtworkRenderer", "ArtworkStore", "ArtworkMusic", "Core", "Catalog", "Storage", "Main"].map(name => join(root, "native/WebMusic", name + ".swift")), "-o", join(bin, "WebMusicBridge")]);
+await run(["/usr/bin/xcrun", "swiftc", "-parse-as-library", "-warnings-as-errors", "-import-objc-header", join(root, "native/WebMusic/KeychainInteraction.h"), "-target", target, ...["Types", "ArtworkTypes", "ArtworkRenderer", "ArtworkStore", "ArtworkMusic", "Core", "Catalog", "Storage", "Main"].map(name => join(root, "native/WebMusic", name + ".swift")), "-o", join(bin, "WebMusicBridge")]);
 await Bun.write(join(contents, "Info.plist"), `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
