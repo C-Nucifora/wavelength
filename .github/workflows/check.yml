@@ -1,10 +1,14 @@
 name: Check
-on: [push, pull_request]
+on: [push, pull_request, workflow_dispatch]
 permissions:
   contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   test:
     runs-on: macos-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -20,3 +24,5 @@ jobs:
       - run: bun scripts/check-artwork.ts
       - run: bun experimental/web-session-probe/auth-wrapper/check.ts
       - run: bun run build:app
+        env:
+          WAVELENGTH_SIGN_IDENTITY: "-"
