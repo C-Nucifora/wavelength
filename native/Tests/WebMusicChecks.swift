@@ -180,6 +180,55 @@ final class WebFixtureProtocol: URLProtocol {
         catch let error as WebMusicError { try expect(error == .invalidInput, "rebind position cannot exceed count") }
         try expect(network.requests.count == calls, "invalid completion and append bounds cause no reads or writes")
     }
+    static func checkCatalogSubstitution(_ record: WebCredentialRecord) async throws {
+        let storefront = #"{"data":[{"id":"au","type":"storefronts"}]}"#
+        let playlist = #"{"data":[{"id":"p.saved","type":"library-playlists","attributes":{"name":"Fixture playlist","canEdit":true,"description":"Wavelength playlist job 33333333-3333-3333-3333-333333333333"}}]}"#
+        func tracks(_ ids: [String]) throws -> String {
+            String(decoding: try JSONSerialization.data(withJSONObject: ["data": ids.map { ["id": "i." + $0, "type": "library-songs", "attributes": ["playParams": ["catalogId": $0], "name": "Song", "artistName": "Artist", "albumName": "Album", "durationInMillis": 197950]] }]), as: UTF8.self)
+        }
+        let metadata: [String: Any] = ["name": "Song", "artistName": "Artist", "albumName": "Album", "durationInMillis": 197950, "isrc": "USUM72601821"]
+        func catalog(_ changed: [String: Any] = [:], ids: [String] = ["6763656725", "6763656876"]) throws -> String {
+            String(decoding: try JSONSerialization.data(withJSONObject: ["data": ids.map { id in ["id": id, "type": "songs", "attributes": metadata.merging(id == "6763656876" ? changed : [:]) { _, new in new }.merging(["playParams": ["id": id, "kind": "song"]]) { _, new in new }] }]), as: UTF8.self)
+        }
+        let seed = WebMusicRequest(action: "addTrackToPlaylist", generation: record.generation, catalogIds: ["6763656725"], position: 0, reconcileOnly: true, playlistId: "p.saved")
+        func operation(_ request: WebMusicRequest, _ responses: [(Int, String)]) async throws -> ([String: Any], FakeWebTransport) {
+            let network = FakeWebTransport(responses)
+            return (try await WebMusicService(store: FakeWebStore(record), lock: FakeWebLock(), transport: network).handle(request), network)
+        }
+        let substituted = try tracks(["6763656876"])
+        let (confirmed, reads) = try await operation(seed, [(200, substituted), (200, storefront), (200, try catalog())])
+        try expect(confirmed["kind"] as? String == "confirmed" && confirmed["catalogId"] as? String == "6763656725" && confirmed["libraryId"] as? String == "i.6763656876", "Apple catalog substitution confirms the requested song without rewriting it")
+        try expect(reads.requests.allSatisfy { $0.httpMethod == "GET" }, "substitution reconciliation never posts")
+        for duration in [197953, 198050] {
+            let (rounded, network) = try await operation(seed, [(200, substituted), (200, storefront), (200, try catalog(["durationInMillis": duration]))])
+            try expect(rounded["kind"] as? String == "confirmed" && network.requests.allSatisfy { $0.httpMethod == "GET" }, "same recording tolerates up to 100 milliseconds of catalog duration rounding")
+        }
+        for changed: [String: Any] in [["isrc": "USUM72601822"], ["name": "Other"], ["artistName": "Other"], ["albumName": "Other"], ["durationInMillis": 198051], ["contentRating": "explicit"], ["isrc": NSNull()], ["durationInMillis": true]] {
+            let (result, network) = try await operation(seed, [(200, substituted), (200, storefront), (200, try catalog(changed))])
+            try expect(result["kind"] as? String != "confirmed" && network.requests.allSatisfy { $0.httpMethod == "GET" }, "different or malformed recordings cannot reconcile")
+        }
+        for body in [try catalog(ids: ["6763656725"]), try catalog(ids: ["6763656725", "6763656876", "9"]), try catalog(ids: ["6763656725", "6763656725"])] {
+            let (result, network) = try await operation(seed, [(200, substituted), (200, storefront), (200, body)])
+            try expect(result["kind"] as? String != "confirmed" && network.requests.allSatisfy { $0.httpMethod == "GET" }, "incomplete or untrusted catalog identity blocks reconciliation")
+        }
+        var append = seed; append.reconcileOnly = false
+        let (appended, appendNetwork) = try await operation(append, [(200, #"{"data":[]}"#), (204, ""), (200, substituted), (200, storefront), (200, try catalog())])
+        try expect(appended["kind"] as? String == "confirmed" && appended["catalogId"] as? String == "6763656725" && appended["alreadyPresent"] as? Bool == false, "post-write substitution confirms original requested ID")
+        try expect(appendNetwork.requests.filter { $0.httpMethod == "POST" }.count == 1, "post-write substitution does not repeat the append")
+        let (failedRead, failedNetwork) = try await operation(append, [(200, substituted), (503, "")])
+        try expect(failedRead["kind"] as? String != "confirmed" && failedNetwork.requests.allSatisfy { $0.httpMethod == "GET" }, "failed substitution lookup never writes")
+        var duplicate = seed; duplicate.catalogIds = ["6763656725", "6763656725"]; duplicate.position = 1
+        let (missingDuplicate, _) = try await operation(duplicate, [(200, substituted), (200, storefront), (200, try catalog())])
+        try expect(missingDuplicate["kind"] as? String == "uncertain", "substitution preserves duplicate occurrence counts")
+        let rebind = WebMusicRequest(action: "rebindPlaylist", generation: record.generation, catalogIds: ["6763656725"], position: 1, playlistId: "p.saved")
+        let (bound, _) = try await operation(rebind, [(200, playlist), (200, substituted), (200, storefront), (200, try catalog())])
+        try expect(bound["generation"] as? String == record.generation, "retry rebind accepts verified recording substitution")
+        let lock = FakeWebLock(), artwork = FakeArtworkService(lock: lock)
+        let network = FakeWebTransport([(200, playlist), (200, substituted), (200, storefront), (200, try catalog())])
+        let cover = WebMusicRequest(action: "playlistCover", generation: record.generation, catalogIds: ["6763656725"], playlistId: "p.saved", name: "Fixture playlist", jobId: "33333333-3333-3333-3333-333333333333", coverMode: .apply)
+        let covered = try await WebMusicService(store: FakeWebStore(record), lock: lock, transport: network, artwork: artwork).handle(cover)
+        try expect(covered["state"] as? String == "verified" && artwork.targets.count == 1, "cover validation shares recording substitution rules")
+    }
     static func checkArtwork(_ record: WebCredentialRecord) async throws {
         for json in [
             #"{"action":"status","unknown":null}"#,
@@ -223,7 +272,7 @@ final class WebFixtureProtocol: URLProtocol {
         try expect(network.requests.count == calls && artwork.targets.count == 1, "stale cover never enters artwork or network")
         func blocked(_ playlistBody: String, _ tracksBody: String = "") async throws {
             let count = artwork.targets.count
-            network.responses = [(200, playlistBody)] + (tracksBody.isEmpty ? [] : [(200, tracksBody)])
+            network.responses = [(200, playlistBody)] + (tracksBody.isEmpty ? [] : [(200, tracksBody)]) + [(200, "{}")]
             let result = try await service.handle(request)
             try expect(result["state"] as? String == "blocked" && result["writeAttempted"] as? Bool == false && artwork.targets.count == count, "invalid cloud target blocks before artwork")
         }
@@ -333,6 +382,7 @@ final class WebFixtureProtocol: URLProtocol {
         let record = WebCredentialRecord(credentials: parsed, generation: "11111111-1111-1111-1111-111111111111")
         try await checkRepeatedPreflight(record)
         try await checkCatalog(record)
+        try await checkCatalogSubstitution(record)
         try await checkCompletion(record)
         try await checkArtwork(record)
         let store = FakeWebStore(record), lock = FakeWebLock(), network = FakeWebTransport()

@@ -113,7 +113,7 @@ final class WebMusicService {
             _ = try await playlist(request.playlistId!, credentials: credentials)
             let contents = try await tracks(request.playlistId!, credentials: credentials)
             let prefix = Array(request.catalogIds!.prefix(request.position!)), extended = Array(request.catalogIds!.prefix(request.position! + 1))
-            guard contents.map(\.catalogID) == prefix || contents.map(\.catalogID) == extended else { throw WebMusicError(code: "malformed", message: "The playlist contents conflict with this job's expected order.") }
+            guard try await tracksMatch(contents, expected: contents.count == extended.count ? extended : prefix, credentials: credentials) else { throw WebMusicError(code: "malformed", message: "The playlist contents conflict with this job's expected order.") }
             return ["generation": current.generation]
         case "addTrackToPlaylist": return await append(request, credentials: credentials)
         case "playlistCover": return await cover(request, credentials: credentials)
@@ -207,6 +207,45 @@ final class WebMusicService {
         }
         throw WebMusicError.malformed
     }
+    private func tracksMatch(_ tracks: [Track], expected: [String], credentials: WebCredentials) async throws -> Bool {
+        guard tracks.count == expected.count else { return false }
+        let mismatches = zip(tracks.map(\.catalogID), expected).filter { $0 != $1 }
+        if mismatches.isEmpty { return true }
+        guard mismatches.allSatisfy({ !expected.contains($0.0) }) else { return false }
+        // Apple can substitute another release of a recording when adding it to a library.
+        let ids = Array(Set(mismatches.flatMap { [$0.0, $0.1] })).sorted()
+        let storefront = try await storefront(credentials)
+        struct Recording: Equatable {
+            let isrc: String, title: String, artist: String, album: String
+            let duration: Double
+            let rating: String?
+            static func == (lhs: Recording, rhs: Recording) -> Bool {
+                // The same Apple recording can differ by a few milliseconds between releases.
+                lhs.isrc == rhs.isrc && lhs.title == rhs.title && lhs.artist == rhs.artist &&
+                    lhs.album == rhs.album && lhs.rating == rhs.rating && abs(lhs.duration - rhs.duration) <= 100
+            }
+        }
+        var recordings: [String: Recording] = [:]
+        for start in stride(from: 0, to: ids.count, by: 100) {
+            let batch = Array(ids[start..<min(start + 100, ids.count)])
+            let object = try await json(path: "/v1/catalog/\(storefront)/songs", query: [URLQueryItem(name: "ids", value: batch.joined(separator: ","))], credentials: credentials)
+            guard object["next"] == nil, let rows = object["data"] as? [[String: Any]], rows.count == batch.count else { throw WebMusicError.malformed }
+            for row in rows {
+                guard row["type"] as? String == "songs", let id = row["id"] as? String,
+                      batch.contains(id), recordings[id] == nil, let attributes = row["attributes"] as? [String: Any],
+                      let params = attributes["playParams"] as? [String: Any], params["id"] as? String == id, params["kind"] as? String == "song",
+                      let isrc = attributes["isrc"] as? String, valid(isrc, "^[A-Z]{2}[A-Z0-9]{3}[0-9]{7}$"),
+                      let title = attributes["name"] as? String, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, title.utf8.count <= 4096,
+                      let artist = attributes["artistName"] as? String, !artist.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, artist.utf8.count <= 4096,
+                      let album = attributes["albumName"] as? String, !album.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, album.utf8.count <= 4096,
+                      let duration = attributes["durationInMillis"] as? NSNumber, CFGetTypeID(duration) != CFBooleanGetTypeID(),
+                      duration.doubleValue.isFinite, duration.doubleValue > 0, duration.doubleValue <= 86_400_000,
+                      attributes["contentRating"] == nil || ["clean", "explicit"].contains(attributes["contentRating"] as? String ?? "") else { throw WebMusicError.malformed }
+                recordings[id] = Recording(isrc: isrc, title: title, artist: artist, album: album, duration: duration.doubleValue, rating: attributes["contentRating"] as? String)
+            }
+        }
+        return mismatches.allSatisfy { recordings[$0.0] == recordings[$0.1] }
+    }
     private func artworkTrack(_ attributes: [String: Any]?) throws -> ArtworkTrack {
         func text(_ key: String) throws -> String {
             guard let value = attributes?[key] as? String, value.utf8.count <= 4096,
@@ -241,7 +280,7 @@ final class WebMusicService {
                   attributes?["name"] as? String == request.name!,
                   description == "Wavelength playlist job " + jobID else { throw WebMusicError.malformed }
             let contents = try await tracks(request.playlistId!, credentials: credentials, includeArtwork: true)
-            guard contents.map(\.catalogID) == request.catalogIds! else { throw WebMusicError.malformed }
+            guard try await tracksMatch(contents, expected: request.catalogIds!, credentials: credentials) else { throw WebMusicError.malformed }
             target = ArtworkTarget(jobID: jobID, playlistID: request.playlistId!, name: request.name!, tracks: contents.map { $0.artwork! })
             guard artwork != nil else { throw WebMusicError.unavailable }
         } catch {
@@ -259,9 +298,9 @@ final class WebMusicService {
             return result
         }
         do {
-            let before = try await tracks(id, credentials: credentials), contents = before.map(\.catalogID)
-            if contents == extended { return confirmed(before, true) }
-            guard contents == prefix else { return outcome("conflict", "The playlist contents conflict with this job's expected order.") }
+            let before = try await tracks(id, credentials: credentials)
+            if try await tracksMatch(before, expected: extended, credentials: credentials) { return confirmed(before, true) }
+            guard try await tracksMatch(before, expected: prefix, credentials: credentials) else { return outcome("conflict", "The playlist contents conflict with this job's expected order.") }
             if request.reconcileOnly == true { return outcome("uncertain", "The previous song addition is not visible yet. Inspect Apple Music before continuing.") }
         } catch let error as WebMusicError {
             return outcome(request.reconcileOnly == true ? "uncertain" : error.code == "malformed" ? "conflict" : "not-added", error.message)
@@ -273,8 +312,8 @@ final class WebMusicService {
         } catch {}
         do {
             let after = try await tracks(id, credentials: credentials)
-            if after.map(\.catalogID) == extended { return confirmed(after, false) }
-            if after.map(\.catalogID) != prefix { return outcome("conflict", "The playlist contents changed during the song addition. Inspect Apple Music.") }
+            if try await tracksMatch(after, expected: extended, credentials: credentials) { return confirmed(after, false) }
+            if try await !tracksMatch(after, expected: prefix, credentials: credentials) { return outcome("conflict", "The playlist contents changed during the song addition. Inspect Apple Music.") }
         } catch let error as WebMusicError {
             if error.code == "malformed" { return outcome("conflict", "The playlist's catalog identities or pagination could not be established. Inspect Apple Music.") }
         } catch {}
