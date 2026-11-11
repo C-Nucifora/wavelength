@@ -74,7 +74,7 @@ test("database permissions cover only its own regular files", () => {
   } finally { store.close(); rmSync(directory, { recursive: true, force: true }); }
 });
 
-test.each(["", "-wal", "-shm"])("constructor rejects preexisting symlink %s before SQLite touches its target", suffix => {
+test.each(["", "-wal", "-shm", ".lock"])("constructor rejects preexisting symlink %s before SQLite touches its target", suffix => {
   const directory = mkdtempSync(join(tmpdir(), "wavelength-symlink-"));
   const path = join(directory, "state.sqlite");
   const target = join(directory, "keep.txt");
@@ -148,4 +148,36 @@ test("permission failure after deleting rolls back both history keys", async () 
     store.forgetHistory();
     expect(store.history()).toEqual([]);
   } finally { permissionSpy?.mockRestore(); store.close(); rmSync(directory, { recursive: true, force: true }); }
+});
+
+test("one engine owns a data directory and closing releases ownership", () => {
+  const root = mkdtempSync(join(tmpdir(), "wavelength-owner-"));
+  const path = join(root, "state.sqlite");
+  const first = new Store(path);
+  try {
+    first.put("job", "saved", {state: "running"});
+    expect(() => new Store(path)).toThrow("already using this data directory");
+    expect(first.get<{state: string}>("job", "saved")).toEqual({state: "running"});
+    expect(statSync(`${path}.lock`).mode & 0o777).toBe(0o600);
+  } finally {first.close();}
+  const next = new Store(path);
+  try {expect(next.get<{state: string}>("job", "saved")).toEqual({state: "running"});}
+  finally {next.close(); rmSync(root, {recursive: true, force: true});}
+});
+
+test("a crashed owner releases the lease without removing saved state", async () => {
+  const root = mkdtempSync(join(tmpdir(), "wavelength-crash-"));
+  const path = join(root, "state.sqlite");
+  const child = Bun.spawn([process.execPath, "-e", `import {Store} from ${JSON.stringify(join(import.meta.dir, "../src/store.ts"))}; const store = new Store(process.argv[1]); store.put("job", "saved", {state: "running"}); console.log("ready"); setInterval(() => {}, 1000);`, path], {stdout: "pipe", stderr: "pipe"});
+  try {
+    const reader = child.stdout.getReader();
+    try {const first = await reader.read(); expect(new TextDecoder().decode(first.value)).toContain("ready");}
+    finally {reader.releaseLock();}
+    expect(() => new Store(path)).toThrow("already using this data directory");
+    child.kill("SIGKILL");
+    await child.exited;
+    const recovered = new Store(path);
+    try {expect(recovered.get<{state: string}>("job", "saved")).toEqual({state: "running"});}
+    finally {recovered.close();}
+  } finally {if (child.exitCode === null) child.kill(); await child.exited; rmSync(root, {recursive: true, force: true});}
 });

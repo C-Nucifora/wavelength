@@ -71,10 +71,13 @@ final class NativeMusicIPC: @unchecked Sendable {
     private let executable: URL
     private let lock = NSLock()
     private var owned: Process?
+    private var stopped = false
     init(executable: URL) { self.executable = executable }
     func stop() {
-        lock.lock(); let process = owned; lock.unlock()
-        if let process, process.isRunning { kill(process.processIdentifier, SIGKILL) }
+        lock.lock()
+        defer { lock.unlock() }
+        stopped = true
+        if let process = owned, process.isRunning { kill(process.processIdentifier, SIGKILL) }
     }
     func call(_ input: [String: Any]) async throws -> [String: Any] {
         let data = try JSONSerialization.data(withJSONObject: input)
@@ -88,10 +91,11 @@ final class NativeMusicIPC: @unchecked Sendable {
         process.executableURL = executable; process.arguments = []
         process.standardInput = input; process.standardOutput = output; process.standardError = FileHandle.nullDevice
         lock.lock()
+        guard !stopped else { lock.unlock(); throw AppError(message: "The connection operation was stopped.") }
         guard owned == nil else { lock.unlock(); throw AppError(message: "A connection operation is already running.") }
+        do { try process.run() } catch { lock.unlock(); throw AppError(message: "The bundled Apple Music bridge is unavailable.") }
         owned = process; lock.unlock()
         defer { lock.lock(); owned = nil; lock.unlock() }
-        do { try process.run() } catch { throw AppError(message: "The bundled Apple Music bridge is unavailable.") }
         let deadline = DispatchWorkItem { if process.isRunning { kill(process.processIdentifier, SIGKILL) } }
         DispatchQueue.global().asyncAfter(deadline: .now() + 120, execute: deadline)
         defer { deadline.cancel(); if process.isRunning { kill(process.processIdentifier, SIGKILL) }; try? input.fileHandleForWriting.close(); try? output.fileHandleForReading.close() }

@@ -189,6 +189,7 @@ enum HistoryOperation: Equatable { case idle, readingFile, parsing, scanning, im
     }
     func start() {
         guard !starting else { return }
+        starting = true
         startup = Task { await initialize() }
     }
     private func initialize() async {

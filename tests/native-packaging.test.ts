@@ -55,6 +55,35 @@ test("engine termination cleans a registered owned helper and preserves unrelate
   }
 }, 10000);
 
+test("native engine requires the parent token over HTTP and restarts after shutdown", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "wavelength-native-auth-"));
+  const token = crypto.randomUUID();
+  try {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const engine = Bun.spawn([process.execPath, "src/index.ts"], {cwd: root, env: {...process.env, PORT: "0", WAVELENGTH_DATA_DIR: directory, WAVELENGTH_ENGINE_TOKEN: token}, stdout: "pipe", stderr: "pipe"});
+      const reader = engine.stdout.getReader();
+      try {
+        const announced = new TextDecoder().decode((await reader.read()).value);
+        const origin = announced.match(/http:\/\/127\.0\.0\.1:\d+/)?.[0];
+        expect(origin).toBeDefined();
+        for (const path of ["/", "/api/session", "/api/ready", "/api/history"]) {
+          expect((await fetch(`${origin}${path}`)).status).toBe(403);
+          expect((await fetch(`${origin}${path}`, {headers: {"x-wavelength-token": "wrong"}})).status).toBe(403);
+        }
+        const response = await fetch(`${origin}/api/ready`, {headers: {"x-wavelength-token": token}});
+        expect(response.status).toBe(200);
+        expect(await response.json()).toMatchObject({ready: true});
+        engine.kill("SIGTERM");
+        expect(await engine.exited).toBe(0);
+        expect(await new Response(engine.stderr).text()).toBe("");
+      } finally {
+        reader.releaseLock();
+        if (engine.exitCode === null) {engine.kill("SIGKILL"); await engine.exited;}
+      }
+    }
+  } finally {await rm(directory, {recursive: true, force: true});}
+}, 10000);
+
 test("engine accepts CSV beyond 128 KiB and retains JSON and 20 MiB ceilings", async () => {
   const directory = await mkdtemp(join(tmpdir(), "wavelength-history-transport-"));
   const engine = Bun.spawn([process.execPath, "src/index.ts"], {cwd: root, env: {...process.env, PORT: "0", WAVELENGTH_DATA_DIR: directory}, stdout: "pipe", stderr: "pipe"});

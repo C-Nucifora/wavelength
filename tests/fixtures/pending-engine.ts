@@ -1,4 +1,4 @@
-const token = "fixture-session";
+const token = process.env.WAVELENGTH_ENGINE_TOKEN || "fixture-session";
 const parentPID = process.ppid;
 setInterval(() => {try {process.kill(parentPID, 0);} catch {process.exit(0);}}, 100);
 const track = {id: "one", catalogId: 1, artistId: 2, title: "Fixture song", artist: "Fixture artist", album: "Fixture album", durationMs: 120000, releaseDate: "2026-01-01", url: "https://music.apple.com/", source: "fixture", match: "exact", provenance: {kind: "unknown", evidence: []}, selected: true};
@@ -36,6 +36,7 @@ async function delayed(route: string) {
 const server = Bun.serve({hostname: "127.0.0.1", port: 0, async fetch(request) {
   const url = new URL(request.url);
   const path = url.pathname;
+  if (process.env.WAVELENGTH_ENGINE_TOKEN && request.headers.get("x-wavelength-token") !== token) return Response.json({error: "Missing native token"}, {status: 403});
   counters[path] = (counters[path] ?? 0) + 1;
   if (request.method === "POST" && (request.headers.get("origin") !== `http://127.0.0.1:${server.port}` || request.headers.get("x-wavelength-token") !== token)) return Response.json({error: "Fixture write lacked exact headers"}, {status: 403});
   if (path === "/api/ready") {

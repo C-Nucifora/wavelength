@@ -26,6 +26,7 @@ import Darwin
         let logs = data.appendingPathComponent("logs", isDirectory: true)
         try FileManager.default.createDirectory(at: logs, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         let instance = UUID().uuidString
+        let engineToken = UUID().uuidString + UUID().uuidString
         let log = logs.appendingPathComponent("engine-\(instance).log")
         guard FileManager.default.createFile(atPath: log.path, contents: nil, attributes: [.posixPermissions: 0o600]) else {
             throw AppError(message: "Cannot create the engine log in Application Support.")
@@ -40,6 +41,7 @@ import Darwin
         var environment = ProcessInfo.processInfo.environment
         environment["PORT"] = "0"
         environment["WAVELENGTH_INSTANCE"] = instance
+        environment["WAVELENGTH_ENGINE_TOKEN"] = engineToken
         environment["WAVELENGTH_DATA_DIR"] = data.path
         environment["WAVELENGTH_WEB_MUSIC_BRIDGE"] = bridge.path
         process.environment = environment
@@ -57,6 +59,7 @@ import Darwin
                 if let range = text.range(of: #"http://127\.0\.0\.1:[0-9]+"#, options: .regularExpression),
                    let url = URL(string: String(text[range])) {
                     let api = APIClient(baseURL: url)
+                    api.token = engineToken
                     let ready: ReadyResponse = try await api.call("/api/ready")
                     guard ready.ready, ready.instance == instance else { throw AppError(message: "The engine readiness response did not match this app instance.") }
                     let session: SessionResponse = try await api.call("/api/session")
@@ -72,7 +75,9 @@ import Darwin
         }
     }
     func stop() async {
-        if let owned = process, owned.isRunning {
+        let owned = process
+        let ownedOutput = output
+        if let owned, owned.isRunning {
             owned.terminate()
             for _ in 0..<40 {
                 if !owned.isRunning { break }
@@ -80,8 +85,10 @@ import Darwin
             }
             if owned.isRunning { kill(owned.processIdentifier, SIGKILL) }
         }
-        process = nil
-        try? output?.close()
-        output = nil
+        if process === owned {
+            process = nil
+            output = nil
+        }
+        try? ownedOutput?.close()
     }
 }

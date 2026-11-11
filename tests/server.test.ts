@@ -95,13 +95,14 @@ test("cancelled discovery cannot overwrite itself with ready results", async () 
 test("creation requires a library preflight for the same selection and AI choice", async () => {
   const store = new Store(":memory:");
   const track: DraftTrack = {id: "one", catalogId: 1, artistId: 2, title: "Song", artist: "Artist", album: "Album", durationMs: 120000, releaseDate: "2026-01-01", url: "https://music.apple.com/", source: "test", match: "exact", provenance: {kind: "unknown", evidence: []}, selected: true};
-  store.put("draft", "draft", {id: "draft", status: "ready", tracks: [track], request: {includeAI: false}});
+  store.put("draft", "draft", {id: "draft", status: "ready", tracks: [track, {...track, id: "two", catalogId: 2}], request: {includeAI: false}});
   const app = createApp({store, port: 8769, discovery: {getGenres: async () => [], buildDraft: async () => ({tracks: [], warnings: []})}, music: {getMusicStatus: async () => ({platform: "darwin", running: true, accessibility: true, automation: "granted", message: "Ready"}), inspectTracks: async tracks => ({newLibraryAdditions: tracks.length, existingLibrarySongs: 0, total: tracks.length}), ensurePlaylist: async name => ({id: "ABCDEF1234567890", name}), addTrackToPlaylist: async () => ({libraryId: "one", alreadyPresent: false}), openPlaylist: async () => {}}});
   const req = (path: string, body: unknown) => new Request(`http://127.0.0.1:8769${path}`, {method: "POST", headers: {host: "127.0.0.1:8769", origin: "http://127.0.0.1:8769", "content-type": "application/json", "x-wavelength-token": app.token}, body: JSON.stringify(body)});
-  const selection = {draftId: "draft", trackIds: ["one"], includeAI: false};
+  const selection = {draftId: "draft", trackIds: ["one", "two"], includeAI: false};
   expect((await app.fetch(req("/api/jobs", {...selection, name: "Test"}))).status).toBe(400);
   const check = await (await app.fetch(req("/api/preflight", selection))).json();
-  expect(check.newLibraryAdditions).toBe(1);
+  expect(check.newLibraryAdditions).toBe(2);
+  expect((await app.fetch(req("/api/jobs", {...selection, trackIds: ["two", "one"], name: "Test", preflightId: check.id}))).status).toBe(400);
   expect((await app.fetch(req("/api/jobs", {...selection, includeAI: true, name: "Test", preflightId: check.id}))).status).toBe(400);
   const result = await app.fetch(req("/api/jobs", {...selection, name: "Test", preflightId: check.id}));
   expect(result.status).toBe(200);

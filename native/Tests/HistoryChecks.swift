@@ -285,6 +285,7 @@ enum HistoryChecks {
         let log = try String(contentsOf: engine.logURL!, encoding: .utf8)
         let range = log.range(of: #"http://127\.0\.0\.1:[0-9]+"#, options: .regularExpression)!
         let api = APIClient(baseURL: URL(string: String(log[range]))!)
+        api.token = engine.process!.environment!["WAVELENGTH_ENGINE_TOKEN"]!
         let session: SessionResponse = try await api.call("/api/session"); api.token = session.token
         return api
     }

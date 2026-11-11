@@ -7,6 +7,8 @@ import Foundation
         if let path = ProcessInfo.processInfo.environment["WAVELENGTH_PENDING_FIXTURE"] { try await DiscographyChecks.run(resources: URL(fileURLWithPath: path)); try await PendingChecks.run(resources: URL(fileURLWithPath: path)); try await HistoryChecks.run(resources: URL(fileURLWithPath: path)) }
         let api = APIClient(baseURL: URL(string: "http://127.0.0.1:12345")!)
         api.token = "session-token"
+        let authenticatedReady = try api.request("/api/ready")
+        precondition(authenticatedReady.value(forHTTPHeaderField: "x-wavelength-token") == "session-token")
         let request = try api.request("/api/preflight", body: ["includeAI": false])
         precondition(request.value(forHTTPHeaderField: "Origin") == "http://127.0.0.1:12345")
         precondition(request.value(forHTTPHeaderField: "x-wavelength-token") == "session-token")

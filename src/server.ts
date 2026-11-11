@@ -13,7 +13,7 @@ type Discovery = {
   getGenres(): Promise<Array<{name: string; slug: string}>>;
   buildDraft(request: SeedRequest, options: {signal: AbortSignal; onProgress: (progress: Draft["progress"]) => void; provenance: (id: number) => Provenance | undefined}): Promise<{tracks: DraftTrack[]; warnings: string[]}>;
 };
-type Dependencies = {store: Store; port: number; discovery: Discovery; readLibraryHistory?: () => Promise<LibraryReadResult>; now?: () => number; music: MusicAdapter & {getMusicStatus(): Promise<MusicStatus>; inspectTracks?(tracks: DraftTrack[]): Promise<CatalogInspection>; searchArtists?(term: string, country: string): Promise<ArtistSearchResult>; buildDiscography?(request: SeedRequest, options: DiscographyOptions): Promise<{tracks: DraftTrack[]; warnings: string[]}>}};
+type Dependencies = {engineToken?: string; store: Store; port: number; discovery: Discovery; readLibraryHistory?: () => Promise<LibraryReadResult>; now?: () => number; music: MusicAdapter & {getMusicStatus(): Promise<MusicStatus>; inspectTracks?(tracks: DraftTrack[]): Promise<CatalogInspection>; searchArtists?(term: string, country: string): Promise<ArtistSearchResult>; buildDiscography?(request: SeedRequest, options: DiscographyOptions): Promise<{tracks: DraftTrack[]; warnings: string[]}>}};
 const publicFiles: Record<string, {name: string; type: string}> = {
   "/": {name: "index.html", type: "text/html; charset=utf-8"},
   "/styles.css": {name: "styles.css", type: "text/css; charset=utf-8"},
@@ -25,8 +25,8 @@ const headers = {
 };
 const json = (value: unknown, status = 200) => Response.json(value, {status, headers});
 
-export function createApp({store, port, discovery, music, readLibraryHistory, now = Date.now}: Dependencies) {
-  const token = crypto.randomUUID() + crypto.randomUUID();
+export function createApp({engineToken, store, port, discovery, music, readLibraryHistory, now = Date.now}: Dependencies) {
+  const token = engineToken || crypto.randomUUID() + crypto.randomUUID();
   const drafts = new Map<string, AbortController>();
   const provenance = (id: number) => store.get<Provenance>("provenance", String(id));
   const assess = (track: DraftTrack, includeAI: boolean) => {
@@ -67,7 +67,7 @@ export function createApp({store, port, discovery, music, readLibraryHistory, no
     }
   }
   const preflights = new Map<string, {key: string; checkedAt: number; generation?: string; unavailable?: number}>();
-  const selectionKey = (input: Record<string, unknown>) => JSON.stringify([input.draftId, [...input.trackIds as string[]].sort(), input.includeAI]);
+  const selectionKey = (input: Record<string, unknown>) => JSON.stringify([input.draftId, input.trackIds, input.includeAI]);
   for (const draft of store.all<Draft>("draft")) if (draft.status === "building") {
     draft.status = "failed";
     draft.error = "The app stopped while building this draft. Build it again.";
@@ -115,7 +115,10 @@ export function createApp({store, port, discovery, music, readLibraryHistory, no
     } catch {throw new Error("Send a JSON object.");}
   }
   async function fetch(request: Request): Promise<Response> {
-    try {authorize(request, port, token);} catch (error) {return json({error: (error as Error).message}, (error as {status?: number}).status || 403);}
+    try {
+      if (engineToken && request.headers.get("x-wavelength-token") !== token) throw new Error("Invalid native engine token.");
+      authorize(request, port, token);
+    } catch (error) {return json({error: (error as Error).message}, (error as {status?: number}).status || 403);}
     const path = new URL(request.url).pathname;
     if (!["GET", "POST"].includes(request.method)) return json({error: "Method not allowed."}, 405);
     try {
