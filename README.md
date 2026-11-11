@@ -59,7 +59,7 @@ Artist cards fill a Discover seed. Replacing a draft asks first; Preview and Cre
 
 ## Privacy and safety
 
-The engine binds only to `127.0.0.1`; writes require a local Host, Origin and per-process session token. Bun never receives Apple session credentials. Native setup passes them to WebMusicBridge through bounded standard input, not arguments, environment or logs. The helper owns Keychain access, rejects redirects and authenticates only against Apple's fixed web-player host. Locks and generation checks guard against stale selections or account changes during requests. Disconnect removes only Wavelength's production connection, not Safari sessions, jobs, history or playlists. Separate probe credentials are not imported.
+The engine binds only to `127.0.0.1`. Native launches require a parent-generated token on every request, including startup; writes also require a local Host and Origin. Only one engine can own a data directory at a time. Bun never receives Apple session credentials. Native setup passes them to WebMusicBridge through bounded standard input, not arguments, environment or logs. The helper owns Keychain access, rejects redirects and authenticates only against Apple's fixed web-player host. Locks and generation checks guard against stale selections or account changes during requests. Disconnect removes only Wavelength's production connection, not Safari sessions, jobs, history or playlists. Separate probe credentials are not imported.
 
 There is no added telemetry. Artist names, search terms and selected discovery region go to the relevant services below; artwork loads from Apple's image servers. Every Noise requests are cached and limited to the index and selected genre pages, not bulk crawling. No website dataset is bundled. Public Apple searches are paced, so longer previews can take several minutes.
 
@@ -68,6 +68,8 @@ Drafts, jobs, assessments, history, discovery cache, private cover assets and pe
 ## Development
 
 The browser interface is a developer view of the engine, with no credential fields or setup endpoints. Use the native app to connect. `bun start` or `Start Wavelength.command` opens the developer interface in Safari at `http://127.0.0.1:8769`; Control-C stops it. `bun run dev` starts without opening a browser. `WAVELENGTH_DATA_DIR` and `PORT` select developer data and loopback port. The native app uses its own Application Support location and private port. A standalone engine needs an explicitly selected compiled helper via `WAVELENGTH_WEB_MUSIC_BRIDGE`; it never compiles or falls back to the old UI helper.
+
+The developer browser server exposes its session bootstrap to local clients. Other OS users on the same machine can obtain that token and access the engine, so use it only on a trusted machine with isolated development data. Loopback and Origin checks do not isolate OS users. The native launch token closes that bootstrap path, but cannot protect against malicious processes with access to your user's environment or files.
 
 ```sh
 bun install --frozen-lockfile
