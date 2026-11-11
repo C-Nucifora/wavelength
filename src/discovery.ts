@@ -19,6 +19,7 @@ const DAY = 86_400_000;
 const entities: Record<string, string> = { amp: "&", quot: '"', apos: "'", lt: "<", gt: ">", nbsp: " ",
   raquo: "»", laquo: "«", ndash: "–", mdash: "—", lsquo: "‘", rsquo: "’", ldquo: "“", rdquo: "”",
   hellip: "…", copy: "©", reg: "®", trade: "™", euro: "€", pound: "£", yen: "¥", cent: "¢", middot: "·" };
+const letters: Record<string, string> = { Oslash: "Ø", oslash: "ø", AElig: "Æ", aelig: "æ", szlig: "ß", ETH: "Ð", eth: "ð", THORN: "Þ", thorn: "þ" };
 const accents = { grave: "\u0300", acute: "\u0301", circ: "\u0302", tilde: "\u0303", uml: "\u0308", ring: "\u030a", cedil: "\u0327" };
 function decode(text: string): string {
   return text.replace(/&(#x[\da-f]+|#\d+|[a-z][a-z\d]+);/gi, (whole, key: string) => {
@@ -26,10 +27,10 @@ function decode(text: string): string {
       const n = key[1]?.toLowerCase() === "x" ? parseInt(key.slice(2), 16) : parseInt(key.slice(1), 10);
       return n > 0 && n <= 0x10ffff && !(n >= 0xd800 && n <= 0xdfff) ? String.fromCodePoint(n) : whole;
     }
-    if (entities[key]) return entities[key];
+    if (Object.hasOwn(entities, key)) return entities[key]!;
     const accent = key.match(/^([a-z])(grave|acute|circ|tilde|uml|ring|cedil)$/i);
-    if (accent) return (accent[1]! + accents[accent[2] as keyof typeof accents]).normalize("NFC");
-    return ({ Oslash: "Ø", oslash: "ø", AElig: "Æ", aelig: "æ", szlig: "ß", ETH: "Ð", eth: "ð", THORN: "Þ", thorn: "þ" } as Record<string, string>)[key] ?? whole;
+    if (accent && Object.hasOwn(accents, accent[2]!)) return (accent[1]! + accents[accent[2] as keyof typeof accents]).normalize("NFC");
+    return Object.hasOwn(letters, key) ? letters[key]! : whole;
   });
 }
 
