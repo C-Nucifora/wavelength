@@ -270,6 +270,8 @@ for (const suffix of ["-wal", "-shm"]) {
     let store: Store | undefined;
     try {
       const lease = new Database(leasePath); lease.exec("PRAGMA journal_mode=WAL; CREATE TABLE fixture (value)"); lease.close();
+      // SQLite can leave its closed fixture's WAL sidecars on macOS.
+      for (const sidecar of ["-wal", "-shm"]) rmSync(leasePath + sidecar, {force: true});
       const bytes = Buffer.alloc(32768, 0x41);
       writeFileSync(target, bytes, {mode: 0o640});
       symlinkSync(target, leasePath + suffix);
