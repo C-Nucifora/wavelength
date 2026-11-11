@@ -1,5 +1,7 @@
 # Hardening verification
 
+This records the initial Linux audit. Later Mac CI evidence, additional findings and the user-requested checkpoint and pause are recorded in [audit-rounds.md](audit-rounds.md).
+
 This audit started from `1e651133b0f65336d6336af12cc0a9aab0f58869` on Linux x86_64 with Bun 1.3.14 and Node 22.22.1. The checkout was clean before the audit. The interrupted run's changes were preserved and reviewed before resuming. No real credentials, Keychain items, personal Music library, paid services or installed app were used. All account and write checks used synthetic adapters or fixtures and temporary state.
 
 ## Issue ledger
