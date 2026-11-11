@@ -182,18 +182,21 @@ enum HistoryChecks {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("wavelength-packaged-history-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: directory) }
         let engine = EngineController(resources: resources, dataDirectory: directory)
-        let api = try await engine.start()
+        var api = try await engine.start()
         do {
             let empty: HistoryResponse = try await api.call("/api/history?timeZone=UTC")
             precondition(empty.sources.isEmpty && empty.page == nil)
+            // Direct fixture access must wait for the engine's exclusive Store lease.
+            await engine.stop()
             try packagedDatabaseCheck(resources: resources, directory: directory, script: """
                 import {Store} from './src/store.ts';
                 import {libraryEnvelope} from './src/history.ts';
                 const store = new Store();
-                for (const kind of ['draft', 'job', 'provenance']) store.put(kind, 'sentinel', {id: 'sentinel', state: 'complete', updatedAt: '2026-01-01', marker: 'preserve'});
+                for (const kind of ['draft', 'job', 'provenance']) store.put(kind, 'sentinel', {id: 'sentinel', name: 'Fixture sentinel', state: 'complete', tracks: [], message: 'Synthetic preserved job', createdAt: '2026-01-01', updatedAt: '2026-01-01', marker: 'preserve'});
                 store.replaceHistory(libraryEnvelope({complete: true, declaredTrackCount: 1, warnings: [], tracks: [{id: '0000000000000001', title: 'Invented zero', artist: 'Fixture artist', albumArtist: null, album: null, genre: null, durationMs: 120000, playedCount: 0, playedAt: null, skippedCount: 0, skippedAt: null, addedAt: null, favorite: false}]}, '2026-01-01T00:00:00Z'));
                 store.close();
                 """)
+            api = try await engine.start()
             let library: HistoryResponse = try await api.call("/api/history?source=library&kind=tracks&timeZone=UTC")
             precondition(library.page?.rows.first?.metricText(for: "libraryPlayCount") == "0" && library.sources.first?.totals.reportedDurationMs == nil)
             let rows = (0..<60).map { "Invented song \($0),Fixture artist,2026-01-\(String(format: "%02d", $0 % 28 + 1))T12:00:00Z,\($0 == 0 ? "0" : "61000")" }.joined(separator: "\n")
@@ -229,12 +232,15 @@ enum HistoryChecks {
             let _: OKResponse = try await api.call("/api/history/forget", body: [:])
             let forgotten: HistoryResponse = try await api.call("/api/history?timeZone=UTC")
             precondition(forgotten.sources.isEmpty)
+            await engine.stop()
             try packagedDatabaseCheck(resources: resources, directory: directory, script: """
                 import {Store} from './src/store.ts';
                 const store = new Store(); store.put('history', 'export', {schemaVersion: 999}); store.close();
                 """)
+            api = try await engine.start()
             do { let _: HistoryResponse = try await api.call("/api/history?timeZone=UTC"); preconditionFailure("Unsupported saved schema accepted") } catch { precondition(error.localizedDescription.contains("schema")) }
             let _: OKResponse = try await api.call("/api/history/forget", body: [:])
+            await engine.stop()
             try packagedDatabaseCheck(resources: resources, directory: directory, script: """
                 import {Store} from './src/store.ts';
                 const store = new Store();
@@ -242,7 +248,6 @@ enum HistoryChecks {
                 if (store.history().length) throw new Error('Forget left history');
                 store.close();
                 """)
-            await engine.stop()
         } catch { await engine.stop(); throw error }
         print("Packaged history checks passed: isolated empty startup, both sources, zero-play library, three profiles, preview without save, bounded pages, timezone bins, replacement decline/confirm, unsupported input and Forget recovering unsupported schema while preserving unrelated state")
     }
