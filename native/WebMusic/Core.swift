@@ -201,7 +201,7 @@ final class WebMusicService {
                   Set(items.map(\.name)).count == items.count,
                   items.allSatisfy({ item in
                       guard let value = item.value, valid(value, "^[0-9]{1,6}$"), let number = Int(value) else { return false }
-                      return item.name == "offset" ? number <= 1000 : item.name == "limit" && number > 0 && number <= 100
+                      return item.name == "offset" ? !rows.isEmpty && number == tracks.count && number <= 1000 : item.name == "limit" && number > 0 && number <= 100
                   }), items.contains(where: { $0.name == "offset" }) else { throw WebMusicError.malformed }
             query = items
         }

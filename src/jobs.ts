@@ -132,6 +132,12 @@ export class Jobs {
         } else job.connectionGeneration = current.generation;
         this.save(job);
       }
+      if (this.cancelled.has(job.id)) {
+        job.state = "cancelled";
+        job.message = "Stopped at your request before further playlist work.";
+        this.save(job);
+        return;
+      }
       if (!job.connectionGeneration) throw new Error("Check the Apple Music connection before creating a playlist.");
       if (!job.playlistId) {
         if (job.creationState === "unknown" || job.creationState === "in-flight") throw new Error("Playlist creation outcome is unknown; a second create is blocked.");

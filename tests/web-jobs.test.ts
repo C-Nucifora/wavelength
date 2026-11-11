@@ -365,3 +365,20 @@ test("web cancel keeps the settling uncertain result", async () => {
   expect(await finished(jobs, job.id)).toMatchObject({state: "cancelled", tracks: [{state: "failed", outcome: "uncertain"}, {state: "pending"}, {state: "pending"}]});
   store.close();
 });
+
+test("cancelling a retry during status prevents a new creation", async () => {
+  const store = new Store(":memory:");
+  let release!: (value: {generation: string}) => void;
+  let creates = 0;
+  const status = new Promise<{generation: string}>(resolve => release = resolve);
+  const job = {...completed(), state: "failed", creationState: "not-started", playlistId: undefined, cover: undefined, tracks: [{track: track(1), state: "pending"}]} as MusicJob;
+  store.put("job", job.id, job);
+  const jobs = new Jobs(store, adapter({getMusicStatus: () => status, ensurePlaylist: async () => {creates++; return {id: "p.test", name: "Test"};}}));
+  jobs.retry(job.id);
+  jobs.cancel(job.id);
+  release({generation: "new"});
+  expect(await finished(jobs, job.id)).toMatchObject({state: "cancelled", creationState: "not-started"});
+  expect(creates).toBe(0);
+  expect(jobs.get(job.id)?.playlistId).toBeUndefined();
+  store.close();
+});
