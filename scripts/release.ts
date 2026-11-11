@@ -40,6 +40,7 @@ function safePath(path: string): void {
 }
 
 async function regularFile(root: string, path: string) {
+  root = resolve(root);
   safePath(path);
   const parts = path.split("/");
   // lstat rejects directory symlinks too, including the supplied root.
