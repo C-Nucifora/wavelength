@@ -122,3 +122,15 @@ test("catalog cancellation after a page prevents subsequent helper reads", async
   await expect(adapter.buildDiscography(request, {...options(), signal: controller.signal})).rejects.toMatchObject({name: "AbortError"});
   expect(reads).toBe(1);
 });
+
+test("AI exclusions do not bypass the total catalog occurrence limit", async () => {
+  const adapter = createWebMusicAdapter(async input => {
+    if (input.action === "status") return {generation: "g1"};
+    if (input.action === "catalogReleases") {
+      const offset = input.offset ?? 0;
+      return envelope({releases: Array.from({length: Math.min(25, 41 - offset)}, (_, i) => release(offset + i + 1, `Release ${offset + i}`, "2000-01-01", 25)), ...(offset === 0 ? {nextOffset: 25} : {})});
+    }
+    return envelope({tracks: Array.from({length: 25}, (_, i) => song(i + 1, 1, i + 1))});
+  });
+  await expect(adapter.buildDiscography(request, {...options(), provenance: () => ({kind: "ai", evidence: ["Fixture"]})})).rejects.toThrow("1,000 songs");
+});

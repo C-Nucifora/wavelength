@@ -207,7 +207,7 @@ export async function parseAppleCSV(chunks: AsyncIterable<Uint8Array>, library: 
           mediaDurationMs: decimalDuration(cell(profile!.media)), enriched: [],
         };
         const matches = record.album ? index.get(JSON.stringify([record.title.trim(), record.album.trim()])) : undefined;
-        if (matches?.size === 1) {
+        if (matches?.size === 1 && (record.artist === null || matches.values().next().value!.artist?.trim() === record.artist.trim())) {
           const track = matches.values().next().value!;
           for (const field of ["artist", "album", "genre"] as const) {
             const value = nullableText(track[field]);
