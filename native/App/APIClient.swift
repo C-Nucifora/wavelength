@@ -11,6 +11,7 @@ import Foundation
         }
         var request = URLRequest(url: url, timeoutInterval: 120)
         request.cachePolicy = .reloadIgnoringLocalCacheData
+        if !token.isEmpty { request.setValue(token, forHTTPHeaderField: "x-wavelength-token") }
         if url.path == "/api/history" {
             guard !token.isEmpty else { throw AppError(message: "The engine session is not ready. Retry startup.") }
             request.setValue(token, forHTTPHeaderField: "x-wavelength-token")

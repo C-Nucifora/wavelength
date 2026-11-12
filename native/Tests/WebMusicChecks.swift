@@ -434,6 +434,11 @@ final class WebFixtureProtocol: URLProtocol {
         try expect(rejected["kind"] as? String == "not-added", "definite rejection is not added")
         let (unmapped, _) = try await operation(append, [(200, #"{"data":[{"type":"library-songs","id":"i.abc"}]}"#)])
         try expect(unmapped["kind"] as? String == "conflict", "library ID is not catalog identity")
+        for offset in [0, 2] {
+            let page = "{\"data\":[{\"type\":\"songs\",\"id\":\"1\"}],\"next\":\"/v1/me/library/playlists/p.abc/tracks?offset=\(offset)&limit=100\"}"
+            let (result, network) = try await operation(append, [(200, page), (200, #"{"data":[{"type":"songs","id":"2"}]}"#)])
+            try expect(result["kind"] as? String == "conflict" && network.requests.count == 1, "readback rejects repeated or skipped offsets before confirmation or writes")
+        }
         let (paged, pageNetwork) = try await operation(append, [(200, #"{"data":[{"type":"songs","id":"1"}],"next":"/v1/me/library/playlists/p.abc/tracks?offset=1&limit=100"}"#), (200, #"{"data":[{"type":"songs","id":"2"}]}"#)])
         try expect(paged["kind"] as? String == "confirmed" && pageNetwork.requests.count == 2, "safe pagination confirms ordered prefix")
         let (unsafe, unsafeNetwork) = try await operation(append, [(200, #"{"data":[],"next":"https://evil.example/v1/me/library/playlists/p.abc/tracks"}"#)])

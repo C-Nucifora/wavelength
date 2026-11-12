@@ -8,9 +8,13 @@ const sources = ["Types", "ArtworkTypes", "ArtworkRenderer", "ArtworkStore", "Ar
 try {
   await mkdir(".build", {recursive: true});
   for (const command of [
-    ["/usr/bin/xcrun", "swiftc", "-parse-as-library", "-warnings-as-errors", "-import-objc-header", "native/WebMusic/KeychainInteraction.h", "-target", target, ...sources, "native/Tests/WebMusicChecks.swift", "-o", join(fixture, "WebMusicChecks")],
+    ["/usr/bin/xcrun", "swiftc", "-j", "1", "-parse-as-library", "-warnings-as-errors", "-import-objc-header", "native/WebMusic/KeychainInteraction.h", "-target", target, ...sources, "native/Tests/WebMusicChecks.swift", "-o", join(fixture, "WebMusicChecks")],
     [join(fixture, "WebMusicChecks")],
-    ["/usr/bin/xcrun", "swiftc", "-parse-as-library", "-warnings-as-errors", "-import-objc-header", "native/WebMusic/KeychainInteraction.h", "-target", target, ...sources, "native/WebMusic/Main.swift", "-o", join(fixture, "WebMusicBridge")],
+    ["/usr/bin/xcrun", "swiftc", "-j", "1", "-parse-as-library", "-warnings-as-errors", "-target", target, ...["Types", "ArtworkTypes", "Core", "Catalog"].map(name => `native/WebMusic/${name}.swift`), "native/Tests/WebMusicPaginationChecks.swift", "-o", join(fixture, "WebMusicPaginationChecks")],
+    [join(fixture, "WebMusicPaginationChecks")],
+    ["/usr/bin/xcrun", "swiftc", "-j", "1", "-parse-as-library", "-warnings-as-errors", "-target", target, ...["Types", "ArtworkTypes", "Core", "Catalog"].map(name => `native/WebMusic/${name}.swift`), "native/Tests/WebMusicPaginationReviewChecks.swift", "-o", join(fixture, "WebMusicPaginationReviewChecks")],
+    [join(fixture, "WebMusicPaginationReviewChecks")],
+    ["/usr/bin/xcrun", "swiftc", "-j", "1", "-parse-as-library", "-warnings-as-errors", "-import-objc-header", "native/WebMusic/KeychainInteraction.h", "-target", target, ...sources, "native/WebMusic/Main.swift", "-o", join(fixture, "WebMusicBridge")],
     ["/usr/bin/codesign", "--force", "--sign", "-", join(fixture, "WebMusicBridge")],
     ["/usr/bin/codesign", "--verify", "--strict", join(fixture, "WebMusicBridge")],
   ]) {

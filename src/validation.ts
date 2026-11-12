@@ -40,13 +40,18 @@ export function playlistName(value: unknown) {
   if (typeof value !== "string" || !value.trim() || value.length > 150 || /[\u0000-\u001F]/.test(value)) throw new Error("Enter a playlist name, up to 150 characters.");
   return value.trim();
 }
+export function validateProvenanceKind(value: unknown, artist: string | number): Provenance {
+  const kind = value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>).kind : undefined;
+  if (typeof kind !== "string" || !["ai", "human", "unknown"].includes(kind)) throw new Error(`Invalid saved classification for ${artist}. Save an explicit ai, human or unknown label before checking or continuing this playlist.`);
+  return value as Provenance;
+}
 export function selectTracks(draft: Draft | undefined, ids: unknown, provenance: (artistId: number) => Provenance | undefined, includeAI = draft?.request.includeAI === true): DraftTrack[] {
   if (!draft || draft.status !== "ready") throw new Error("Build and review a playlist draft first.");
   if (!Array.isArray(ids) || !ids.length || ids.length > (draft.request.mode === "discography" ? 1000 : 50) || ids.some(id => typeof id !== "string") || new Set(ids).size !== ids.length) throw new Error("Select unique songs from this draft.");
   const tracks = ids.map(id => {
     const track = draft.tracks.find(track => track.id === id);
     if (!track) throw new Error("Song not found in this draft.");
-    const latest = provenance(track.artistId) || track.provenance;
+    const latest = validateProvenanceKind(provenance(track.artistId) ?? track.provenance, track.artist);
     if (!includeAI && latest.kind === "ai") throw new Error(`AI artists are off. Remove ${track.artist} or turn AI artists on.`);
     return {...track, provenance: latest};
   });

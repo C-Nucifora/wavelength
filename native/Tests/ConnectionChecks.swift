@@ -2,6 +2,10 @@ import Foundation
 
 enum ConnectionChecks {
     @MainActor static func run() async throws {
+        let stopped = NativeMusicIPC(executable: URL(fileURLWithPath: "/does-not-exist"))
+        stopped.stop()
+        do { _ = try await stopped.call(["action": "status"]); preconditionFailure("Stopped IPC launched work") }
+        catch { precondition(error.localizedDescription.contains("stopped"), "Queued calls must stop before spawning") }
         let legacy = try JSONDecoder().decode(MusicJob.self, from: Data(#"{"id":"old","name":"Old","state":"complete","tracks":[],"message":"All songs added","createdAt":"today","updatedAt":"today"}"#.utf8))
         precondition(legacy.cover == nil && !legacy.active && legacy.coverAction == nil, "Old records acquire no cover work")
         var coverJob = legacy

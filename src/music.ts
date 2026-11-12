@@ -9,7 +9,7 @@ const nativeDirectory = fileURLToPath(new URL("../native/", import.meta.url));
 const buildDirectory = fileURLToPath(new URL("../.build/", import.meta.url));
 const helperPath = process.env.WAVELENGTH_MUSIC_BRIDGE || `${buildDirectory}MusicBridge`;
 const ownedHelpers = new Set<ReturnType<typeof execFile>>();
-export function stopOwnedHelpers() {for (const child of ownedHelpers) child.kill("SIGTERM"); ownedHelpers.clear();}
+export function stopOwnedHelpers() {for (const child of ownedHelpers) child.kill("SIGKILL");}
 let compilation: Promise<void> | undefined;
 
 export function validateMusicTrack(track: DraftTrack): void {
@@ -31,7 +31,7 @@ export function libraryCommand(input: Record<string, unknown>): {file: string; a
 
 function execute(file: string, args: string[], timeout = 30_000, maxBuffer = 2 * 1024 * 1024): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = execFile(file, args, {timeout, maxBuffer}, (error, stdout, stderr) => {
+    const child = execFile(file, args, {timeout, maxBuffer, killSignal: "SIGKILL"}, (error, stdout, stderr) => {
       ownedHelpers.delete(child);
       if (error) {
         const detail = stderr.trim() || error.message;

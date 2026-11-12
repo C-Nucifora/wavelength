@@ -18,10 +18,12 @@ const errorMessages: Record<string, string> = {
   "catalog-date": "A release has no valid full Apple release date. Its chronological order cannot be verified.",
 };
 function failure(code: string, uncertain: boolean): Error & {code: string; uncertain: boolean} {
-  return Object.assign(new Error(errorMessages[code] || "The Apple Music bridge did not return a confirmed result. No write was automatically repeated."), {code, uncertain});
+  return Object.assign(new Error(Object.hasOwn(errorMessages, code) ? errorMessages[code] : "The Apple Music bridge did not return a confirmed result. No write was automatically repeated."), {code, uncertain});
 }
+const errorCodes = new Set([...Object.keys(errorMessages), "malformed", "transport"]);
 const children = new Set<Bun.Subprocess>();
-export function stopOwnedHelpers() {for (const child of children) child.kill();}
+// Shutdown exits the engine immediately, so cleanup cannot rely on a later timer.
+export function stopOwnedHelpers() {for (const child of children) if (child.exitCode === null) child.kill("SIGKILL");}
 
 export async function runBridgeRequest(input: BridgeRequest, options: {command?: string[]; timeoutMs?: number} = {}): Promise<unknown> {
   const allowed = ["action", "generation", "catalogIds", "position", "reconcileOnly", "playlistId", "name", "jobId", "coverMode", "country", "term", "artistId", "releaseId", "offset"];
@@ -45,6 +47,7 @@ export async function runBridgeRequest(input: BridgeRequest, options: {command?:
   try {child = Bun.spawn(options.command || [process.env.WAVELENGTH_WEB_MUSIC_BRIDGE || resolve("native/bin/WebMusicBridge")], {stdin: "pipe", stdout: "pipe", stderr: "ignore"});}
   catch {throw failure("unavailable", false);}
   children.add(child);
+  const exited = child.exited.then(() => {children.delete(child);});
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const operation = async () => {
@@ -57,7 +60,7 @@ export async function runBridgeRequest(input: BridgeRequest, options: {command?:
         const {done, value} = await reader.read();
         if (done) break;
         size += value.byteLength;
-        if (size > 131072) {child.kill(); throw failure("malformed", write);}
+        if (size > 131072) throw failure("malformed", write);
         chunks.push(value);
       }} finally {reader.releaseLock();}
       if (await child.exited !== 0) throw failure("transport", write);
@@ -68,22 +71,29 @@ export async function runBridgeRequest(input: BridgeRequest, options: {command?:
       try {envelope = JSON.parse(new TextDecoder().decode(bytes));} catch {throw failure("malformed", write);}
       if (!envelope || typeof envelope !== "object" || typeof envelope.ok !== "boolean") throw failure("malformed", write);
       if (!envelope.ok) {
-        if (!envelope.error || typeof envelope.error.code !== "string" || typeof envelope.error.uncertain !== "boolean") throw failure("malformed", write);
+        if (!envelope.error || typeof envelope.error.code !== "string" || !errorCodes.has(envelope.error.code) || typeof envelope.error.uncertain !== "boolean") throw failure("malformed", write);
         throw failure(envelope.error.code, envelope.error.uncertain);
       }
       if (!envelope.result || typeof envelope.result !== "object" || Array.isArray(envelope.result)) throw failure("malformed", write);
       return envelope.result as unknown;
     };
-    return await Promise.race([operation(), new Promise<never>((_, reject) => {timer = setTimeout(() => {child.kill(); reject(failure("transport", write));}, options.timeoutMs ?? 120000);})]);
+    return await Promise.race([operation(), new Promise<never>((_, reject) => {timer = setTimeout(() => {reject(failure("transport", write));}, options.timeoutMs ?? 120000);})]);
   } catch (error) {if (error instanceof Error && "uncertain" in error) throw error; throw failure("transport", write);}
-  finally {if (timer) clearTimeout(timer); children.delete(child); if (child.exitCode === null) child.kill();}
+  finally {
+    if (timer) clearTimeout(timer);
+    if (child.exitCode === null) child.kill("SIGKILL");
+    // Keep ownership if the OS cannot report exit within the bounded reap wait.
+    let reapTimer: ReturnType<typeof setTimeout> | undefined;
+    try {await Promise.race([exited, new Promise<void>(resolve => {reapTimer = setTimeout(resolve, 250);})]);}
+    finally {if (reapTimer) clearTimeout(reapTimer);}
+  }
 }
 function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw failure("malformed", false);
   return value as Record<string, unknown>;
 }
 const text = (value: unknown) => typeof value === "string" && value.length > 0 && value.length <= 128 ? value : undefined;
-const coverCodes = new Set([...Object.keys(errorMessages), "malformed", "transport", "image-verified", "image-unconfirmed", "automation-permission", "permission-ready", "journal-missing", "unsafe-store", "invalid-image", "identity-mismatch", "music-unavailable"]);
+const coverCodes = new Set([...errorCodes, "image-verified", "image-unconfirmed", "automation-permission", "permission-ready", "journal-missing", "unsafe-store", "invalid-image", "identity-mismatch", "music-unavailable"]);
 export function createWebMusicAdapter(invoke: (input: BridgeRequest) => Promise<unknown> = runBridgeRequest): WebMusicAdapter & {getMusicStatus(): Promise<MusicStatus>; inspectTracks(tracks: DraftTrack[]): Promise<CatalogInspection>; searchArtists(term: string, country: string): Promise<ArtistSearchResult>; buildDiscography(request: SeedRequest, options: DiscographyOptions): Promise<{tracks: DraftTrack[]; warnings: string[]}>} {
   async function getMusicStatus(): Promise<MusicStatus> {
     const result = record(await invoke({action: "status"}));

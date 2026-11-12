@@ -107,7 +107,7 @@ export async function buildDiscography(request: SeedRequest, options: Discograph
           match: "exact", provenance: origin, selected: true, releaseId: release.id, discNumber: item.discNumber, trackNumber: item.trackNumber});
         count++;
       }
-      if (tracks.length + releaseTracks.length > 1000) throw new Error("This discography exceeds the supported limit of 1,000 songs. No partial draft was created.");
+      if (tracks.length + excludedAI + releaseTracks.length > 1000) throw new Error("This discography exceeds the supported limit of 1,000 songs. No partial draft was created.");
       if (count > release.trackCount) throw malformed();
       offset = next(result, offset);
     } while (offset !== undefined);

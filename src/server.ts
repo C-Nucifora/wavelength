@@ -1,7 +1,7 @@
 import type {ArtistSearchResult, Draft, DraftTrack, MusicStatus, Provenance, SeedRequest} from "./types";
 import {Store} from "./store";
 import {Jobs, type MusicAdapter} from "./jobs";
-import {artistSearch, authorize, playlistName, selectTracks, validateSeed} from "./validation";
+import {artistSearch, authorize, playlistName, selectTracks, validateProvenanceKind, validateSeed} from "./validation";
 import {HistoryState} from "./history-state";
 import {summarizeHistory, validateHistoryQuery} from "./history-summary";
 import {HISTORY_LIMITS, type LibraryReadResult} from "./history-types";
@@ -13,7 +13,7 @@ type Discovery = {
   getGenres(): Promise<Array<{name: string; slug: string}>>;
   buildDraft(request: SeedRequest, options: {signal: AbortSignal; onProgress: (progress: Draft["progress"]) => void; provenance: (id: number) => Provenance | undefined}): Promise<{tracks: DraftTrack[]; warnings: string[]}>;
 };
-type Dependencies = {store: Store; port: number; discovery: Discovery; readLibraryHistory?: () => Promise<LibraryReadResult>; now?: () => number; music: MusicAdapter & {getMusicStatus(): Promise<MusicStatus>; inspectTracks?(tracks: DraftTrack[]): Promise<CatalogInspection>; searchArtists?(term: string, country: string): Promise<ArtistSearchResult>; buildDiscography?(request: SeedRequest, options: DiscographyOptions): Promise<{tracks: DraftTrack[]; warnings: string[]}>}};
+type Dependencies = {engineToken?: string; store: Store; port: number; discovery: Discovery; readLibraryHistory?: () => Promise<LibraryReadResult>; now?: () => number; music: MusicAdapter & {getMusicStatus(): Promise<MusicStatus>; inspectTracks?(tracks: DraftTrack[]): Promise<CatalogInspection>; searchArtists?(term: string, country: string): Promise<ArtistSearchResult>; buildDiscography?(request: SeedRequest, options: DiscographyOptions): Promise<{tracks: DraftTrack[]; warnings: string[]}>}};
 const publicFiles: Record<string, {name: string; type: string}> = {
   "/": {name: "index.html", type: "text/html; charset=utf-8"},
   "/styles.css": {name: "styles.css", type: "text/css; charset=utf-8"},
@@ -25,12 +25,15 @@ const headers = {
 };
 const json = (value: unknown, status = 200) => Response.json(value, {status, headers});
 
-export function createApp({store, port, discovery, music, readLibraryHistory, now = Date.now}: Dependencies) {
-  const token = crypto.randomUUID() + crypto.randomUUID();
+export function createApp({engineToken, store, port, discovery, music, readLibraryHistory, now = Date.now}: Dependencies) {
+  const token = engineToken || crypto.randomUUID() + crypto.randomUUID();
   const drafts = new Map<string, AbortController>();
-  const provenance = (id: number) => store.get<Provenance>("provenance", String(id));
+  const provenance = (id: number) => {
+    const value = store.get<unknown>("provenance", String(id));
+    return value === undefined ? undefined : validateProvenanceKind(value, id);
+  };
   const assess = (track: DraftTrack, includeAI: boolean) => {
-    const latest = provenance(track.artistId) || track.provenance;
+    const latest = validateProvenanceKind(provenance(track.artistId) ?? track.provenance, track.artist);
     if (!includeAI && latest.kind === "ai") throw new Error(`AI artists are off. ${track.artist} is now marked AI. Build a new draft to change your selection.`);
     return {...track, provenance: latest};
   };
@@ -67,7 +70,8 @@ export function createApp({store, port, discovery, music, readLibraryHistory, no
     }
   }
   const preflights = new Map<string, {key: string; checkedAt: number; generation?: string; unavailable?: number}>();
-  const selectionKey = (input: Record<string, unknown>) => JSON.stringify([input.draftId, [...input.trackIds as string[]].sort(), input.includeAI]);
+  let provenanceRevision = 0;
+  const selectionKey = (input: Record<string, unknown>) => JSON.stringify([input.draftId, input.trackIds, input.includeAI]);
   for (const draft of store.all<Draft>("draft")) if (draft.status === "building") {
     draft.status = "failed";
     draft.error = "The app stopped while building this draft. Build it again.";
@@ -115,7 +119,10 @@ export function createApp({store, port, discovery, music, readLibraryHistory, no
     } catch {throw new Error("Send a JSON object.");}
   }
   async function fetch(request: Request): Promise<Response> {
-    try {authorize(request, port, token);} catch (error) {return json({error: (error as Error).message}, (error as {status?: number}).status || 403);}
+    try {
+      if (engineToken && request.headers.get("x-wavelength-token") !== token) throw new Error("Invalid native engine token.");
+      authorize(request, port, token);
+    } catch (error) {return json({error: (error as Error).message}, (error as {status?: number}).status || 403);}
     const path = new URL(request.url).pathname;
     if (!["GET", "POST"].includes(request.method)) return json({error: "Method not allowed."}, 405);
     try {
@@ -178,9 +185,10 @@ export function createApp({store, port, discovery, music, readLibraryHistory, no
         return json(draft);
       }
       if (path === "/api/provenance") {
-        if (!Number.isSafeInteger(input.artistId) || Number(input.artistId) <= 0 || !["ai", "human", "unknown"].includes(String(input.kind))) throw new Error("Choose an artist and a supported provenance label.");
+        if (!Number.isSafeInteger(input.artistId) || Number(input.artistId) <= 0 || typeof input.kind !== "string" || !["ai", "human", "unknown"].includes(input.kind)) throw new Error("Choose an artist and a supported provenance label.");
         if (input.evidence !== undefined && (typeof input.evidence !== "string" || input.evidence.length > 2000)) throw new Error("Evidence must be text, up to 2000 characters.");
         store.put("provenance", String(input.artistId), {kind: input.kind, evidence: typeof input.evidence === "string" && input.evidence.trim() ? [input.evidence.trim()] : [], note: "Personal classification, not independently verified"});
+        provenanceRevision++;
         preflights.clear();
         return json({ok: true});
       }
@@ -192,8 +200,10 @@ export function createApp({store, port, discovery, music, readLibraryHistory, no
         if (path === "/api/preflight") {
           if (!music.inspectTracks) throw new Error("Library inspection is unavailable.");
           const release = acquireMusicRead("preflight");
+          const revision = provenanceRevision;
           let result;
           try {result = await music.inspectTracks(tracks);} finally {release();}
+          if (revision !== provenanceRevision) throw new Error("Artist classifications changed during the library check. Check this selection again.");
           const id = crypto.randomUUID();
           if (preflights.size >= 64) preflights.delete(preflights.keys().next().value!);
           if (music.kind === "web-session" && !result.generation) throw new Error("Check the Apple Music connection again.");

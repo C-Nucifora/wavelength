@@ -63,6 +63,7 @@ extension WebMusicService {
         guard let relationship = (row["relationships"] as? [String: Any])?["artists"] as? [String: Any],
               relationship["next"] == nil, let artists = relationship["data"] as? [[String: Any]], !artists.isEmpty,
               artists.count <= 100 else { throw WebMusicError.malformed }
+        try pageTotal(relationship, count: artists.count)
         return try artists.map {
             guard $0["type"] as? String == "artists", let id = safeCatalogID($0["id"] as? String) else { throw WebMusicError.malformed }
             return id
@@ -100,6 +101,7 @@ extension WebMusicService {
             if results["artists"] == nil { result["artists"] = [[String: Any]]() }
             else {
                 guard let artists = results["artists"] as? [String: Any], let rows = artists["data"] as? [[String: Any]], rows.count <= 25 else { throw WebMusicError.malformed }
+                try pageTotal(artists, count: rows.count)
                 result["artists"] = try rows.map { row in
                     let (id, attributes) = try catalogResource(row, type: "artists")
                     var artist: [String: Any] = ["id": id, "name": try catalogText(attributes["name"]), "url": try catalogURL(attributes["url"])]
@@ -112,6 +114,7 @@ extension WebMusicService {
             let path = releases ? "/v1/catalog/\(storefront)/artists/\(request.artistId!)/albums" : "/v1/catalog/\(storefront)/albums/\(request.releaseId!)/tracks"
             let object = try await json(path: path, query: [URLQueryItem(name: "limit", value: String(limit)), URLQueryItem(name: "offset", value: String(offset)), URLQueryItem(name: "include", value: "artists")], credentials: credentials)
             guard let rows = object["data"] as? [[String: Any]], rows.count <= limit else { throw WebMusicError.malformed }
+            try pageTotal(object, offset: offset, count: rows.count)
             if let next = try catalogNext(object["next"], path: path, offset: offset, count: rows.count, limit: limit) { result["nextOffset"] = next }
             var resources: [[String: Any]] = [], skipped = 0
             for row in rows {

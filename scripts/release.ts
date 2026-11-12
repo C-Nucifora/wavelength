@@ -8,8 +8,8 @@ export type Snapshot = {files: Entry[]};
 export async function captureSnapshot(root: string, paths: string[]): Promise<Snapshot> {
   const files: Entry[] = [];
   for (const path of paths) {
-    safePath(path);
-    files.push({path, sha256: await hash(join(root, path)), mode: (await lstat(join(root, path))).mode & 0o777});
+    const stat = await regularFile(root, path);
+    files.push({path, sha256: await hash(join(root, path)), mode: stat.mode & 0o777});
   }
   const snapshot = {files};
   await validateSnapshot(root, snapshot);
@@ -39,6 +39,19 @@ function safePath(path: string): void {
   if (!path || path.startsWith("/") || path.split("/").some(part => !part || part === "." || part === "..") || /[\\\x00-\x1f\x7f]/.test(path)) throw new Error(`Unsafe path: ${path}`);
 }
 
+async function regularFile(root: string, path: string) {
+  root = resolve(root);
+  safePath(path);
+  const parts = path.split("/");
+  // lstat rejects directory symlinks too, including the supplied root.
+  for (let count = 0; count < parts.length; count++) {
+    if (!(await lstat(join(root, ...parts.slice(0, count)))).isDirectory()) throw new Error(`Not a regular file: ${path}`);
+  }
+  const stat = await lstat(join(root, path));
+  if (!stat.isFile()) throw new Error(`Not a regular file: ${path}`);
+  return stat;
+}
+
 async function run(command: string[], cwd?: string, env?: Record<string, string | undefined>): Promise<string> {
   const child = Bun.spawn(command, {cwd, env, stdout: "pipe", stderr: "pipe"});
   const [stdout, stderr, status] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
@@ -53,13 +66,8 @@ export async function verifyFiles(root: string, entries: Entry[]): Promise<void>
     safePath(entry.path);
     if (seen.has(entry.path)) throw new Error(`Duplicate path: ${entry.path}`);
     seen.add(entry.path);
-    // Check every parent too, so a directory symlink cannot escape the root.
-    const parts = entry.path.split("/");
-    for (let count = 1; count <= parts.length; count++) {
-      const stat = await lstat(join(root, ...parts.slice(0, count)));
-      if (stat.isSymbolicLink() || count === parts.length && !stat.isFile()) throw new Error(`Not a regular file: ${entry.path}`);
-      if (count === parts.length && entry.mode !== undefined && (stat.mode & 0o777) !== entry.mode) throw new Error(`Mode changed: ${entry.path}`);
-    }
+    const stat = await regularFile(root, entry.path);
+    if (entry.mode !== undefined && (stat.mode & 0o777) !== entry.mode) throw new Error(`Mode changed: ${entry.path}`);
     if (!/^[a-f0-9]{64}$/.test(entry.sha256) || await hash(join(root, entry.path)) !== entry.sha256) throw new Error(`Hash mismatch: ${entry.path}`);
   }
 }

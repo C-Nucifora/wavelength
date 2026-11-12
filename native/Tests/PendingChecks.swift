@@ -7,6 +7,8 @@ enum PendingChecks {
         let engine = EngineController(resources: resources, dataDirectory: directory)
         let model = AppModel(engine: engine)
         model.start()
+        model.start()
+        precondition(model.starting, "Startup must claim ownership before scheduling work")
         for _ in 0..<100 {
             if model.connected { break }
             try await Task.sleep(for: .milliseconds(30))
@@ -15,6 +17,7 @@ enum PendingChecks {
         let log = try String(contentsOf: engine.logURL!, encoding: .utf8)
         let range = log.range(of: #"http://127\.0\.0\.1:[0-9]+"#, options: .regularExpression)!
         let api = APIClient(baseURL: URL(string: String(log[range]))!)
+        api.token = engine.process!.environment!["WAVELENGTH_ENGINE_TOKEN"]!
         let session: SessionResponse = try await api.call("/api/session")
         api.token = session.token
         try await checkCovers(model, api: api)
@@ -67,6 +70,7 @@ enum PendingChecks {
         let newLog = try String(contentsOf: engine.logURL!, encoding: .utf8)
         let newRange = newLog.range(of: #"http://127\.0\.0\.1:[0-9]+"#, options: .regularExpression)!
         let newAPI = APIClient(baseURL: URL(string: String(newLog[newRange]))!)
+        newAPI.token = engine.process!.environment!["WAVELENGTH_ENGINE_TOKEN"]!
         let newSession: SessionResponse = try await newAPI.call("/api/session")
         newAPI.token = newSession.token
         await model.checkLibrary()

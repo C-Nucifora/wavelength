@@ -132,6 +132,12 @@ export class Jobs {
         } else job.connectionGeneration = current.generation;
         this.save(job);
       }
+      if (this.cancelled.has(job.id)) {
+        job.state = "cancelled";
+        job.message = "Stopped at your request before further playlist work.";
+        this.save(job);
+        return;
+      }
       if (!job.connectionGeneration) throw new Error("Check the Apple Music connection before creating a playlist.");
       if (!job.playlistId) {
         if (job.creationState === "unknown" || job.creationState === "in-flight") throw new Error("Playlist creation outcome is unknown; a second create is blocked.");
@@ -180,7 +186,10 @@ export class Jobs {
       const added = job.tracks.filter(item => item.state === "added").length;
       job.state = this.cancelled.has(job.id) ? "cancelled" : added === job.tracks.length ? "complete" : added > 0 ? "partial" : "failed";
       job.message = `${added} of ${job.tracks.length} songs confirmed${job.state === "cancelled" ? ". Stopped at your request." : job.state === "complete" ? ". Playlist is ready." : ". Queue stopped. Retry verifies the saved playlist first."}`;
-    } catch (error) {job.state = "failed"; job.message = job.creationState === "unknown" ? "Playlist creation outcome is unknown. Inspect Apple Music before starting another job; retry is blocked." : errorMessage(error);}
+    } catch (error) {
+      job.state = this.cancelled.has(job.id) ? "cancelled" : "failed";
+      job.message = job.creationState === "unknown" ? "Playlist creation outcome is unknown. Inspect Apple Music before starting another job; retry is blocked." : job.state === "cancelled" ? "Stopped at your request before further playlist work." : errorMessage(error);
+    }
     if (job.state === "complete" && this.coverAllowed(job)) job.cover = {state: "pending", helperAttempted: false};
     this.save(job);
     if (job.cover?.state === "pending") await this.runCover(job, music, "apply");

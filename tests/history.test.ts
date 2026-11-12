@@ -125,9 +125,9 @@ test("nonempty text is preserved while exact enrichment trims only matching keys
 
 test("enrichment never folds case or accents, matches albumless rows, or overwrites an artist", async () => {
   const result = await parseAppleCSV(csvChunks(`${header},Artist,Album Name\nSong,,Provided,Album\nsong,,,Album\nSóng,,,Album\nSong,,,`), [libraryTrack()]);
-  expect(result.records[0]).toMatchObject({ artist: "Provided", genre: "Electronic", enriched: ["genre"] });
+  expect(result.records[0]).toMatchObject({ artist: "Provided", genre: null, albumArtist: null, enriched: [] });
   expect(result.records.slice(1).every(row => row.artist === null)).toBe(true);
-  expect(result.coverage.unmatchedRows).toBe(3);
+  expect(result.coverage.unmatchedRows).toBe(4);
 });
 
 test("distinct album artists and conflicting duplicate-ID metadata are ambiguous", async () => {

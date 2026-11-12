@@ -1,4 +1,5 @@
 import Foundation
+import CoreFoundation
 
 final class WebMusicService {
     let store: any WebCredentialStorage
@@ -91,6 +92,7 @@ final class WebMusicService {
                 let batch = Array(lookup[start..<min(start + 100, lookup.count)])
                 let object = try await json(path: "/v1/catalog/\(storefront)/songs", query: [URLQueryItem(name: "ids", value: batch.joined(separator: ","))], credentials: credentials)
                 guard object["next"] == nil, let songs = object["data"] as? [[String: Any]], songs.count <= batch.count else { throw WebMusicError.malformed }
+                try pageTotal(object, count: songs.count)
                 for song in songs {
                     guard song["type"] as? String == "songs", let id = song["id"] as? String, batch.contains(id), seen.insert(id).inserted else { throw WebMusicError.malformed }
                     let params = (song["attributes"] as? [String: Any])?["playParams"] as? [String: Any]
@@ -167,6 +169,29 @@ final class WebMusicService {
         guard let rows = object["data"] as? [[String: Any]], rows.count == 1, rows[0]["type"] as? String == "storefronts", let id = rows[0]["id"] as? String, valid(id, "^[a-z]{2}$") else { throw WebMusicError.malformed }
         return id
     }
+    @discardableResult
+    func pageTotal(_ object: [String: Any], offset: Int = 0, count: Int, previous: Int? = nil) throws -> Int? {
+        var total = previous
+        if let value = object["meta"] {
+            guard let meta = value as? [String: Any] else { throw WebMusicError.malformed }
+            if let value = meta["total"] {
+                guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
+                      number.doubleValue.isFinite, number.doubleValue.rounded() == number.doubleValue,
+                      number.doubleValue >= 0, number.doubleValue <= 9_007_199_254_740_991 else { throw WebMusicError.malformed }
+                let supplied = number.intValue
+                if let decimal = number as? NSDecimalNumber {
+                    guard decimal.compare(NSDecimalNumber(string: String(supplied))) == .orderedSame else { throw WebMusicError.malformed }
+                }
+                guard total == nil || total == supplied else { throw WebMusicError.malformed }
+                total = supplied
+            }
+        }
+        if let total {
+            let end = offset + count
+            guard end <= total, object["next"] == nil ? end == total : end < total else { throw WebMusicError.malformed }
+        }
+        return total
+    }
     private func playlist(_ id: String, credentials: WebCredentials) async throws -> [String: Any] {
         let object = try await json(path: "/v1/me/library/playlists/\(id)", credentials: credentials)
         guard let rows = object["data"] as? [[String: Any]], rows.count == 1, rows[0]["type"] as? String == "library-playlists", rows[0]["id"] as? String == id else { throw WebMusicError.malformed }
@@ -177,11 +202,13 @@ final class WebMusicService {
         let path = "/v1/me/library/playlists/\(id)/tracks"
         var query = [URLQueryItem(name: "limit", value: "100")]
         var seen = Set<String>(), tracks: [Track] = []
+        var total: Int?
         for _ in 0..<20 {
             let marker = query.map { $0.name + "=" + ($0.value ?? "") }.joined(separator: "&")
             guard seen.insert(marker).inserted else { throw WebMusicError.malformed }
             let object = try await json(path: path, query: query, credentials: credentials)
             guard let rows = object["data"] as? [[String: Any]], rows.count <= 100 else { throw WebMusicError.malformed }
+            total = try pageTotal(object, offset: tracks.count, count: rows.count, previous: total)
             for row in rows {
                 let type = row["type"] as? String
                 let params = (row["attributes"] as? [String: Any])?["playParams"] as? [String: Any]
@@ -201,7 +228,7 @@ final class WebMusicService {
                   Set(items.map(\.name)).count == items.count,
                   items.allSatisfy({ item in
                       guard let value = item.value, valid(value, "^[0-9]{1,6}$"), let number = Int(value) else { return false }
-                      return item.name == "offset" ? number <= 1000 : item.name == "limit" && number > 0 && number <= 100
+                      return item.name == "offset" ? !rows.isEmpty && number == tracks.count && number <= 1000 : item.name == "limit" && number > 0 && number <= 100
                   }), items.contains(where: { $0.name == "offset" }) else { throw WebMusicError.malformed }
             query = items
         }
@@ -230,6 +257,7 @@ final class WebMusicService {
             let batch = Array(ids[start..<min(start + 100, ids.count)])
             let object = try await json(path: "/v1/catalog/\(storefront)/songs", query: [URLQueryItem(name: "ids", value: batch.joined(separator: ","))], credentials: credentials)
             guard object["next"] == nil, let rows = object["data"] as? [[String: Any]], rows.count == batch.count else { throw WebMusicError.malformed }
+            try pageTotal(object, count: rows.count)
             for row in rows {
                 guard row["type"] as? String == "songs", let id = row["id"] as? String,
                       batch.contains(id), recordings[id] == nil, let attributes = row["attributes"] as? [String: Any],

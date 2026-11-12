@@ -8,16 +8,31 @@ export const dataDirectory = process.env.WAVELENGTH_DATA_DIR || join(homedir(), 
 
 export class Store {
   private db: Database;
+  private lease?: Database;
   private path: string;
   constructor(path = join(dataDirectory, "state.sqlite")) {
     this.path = path === ":memory:" ? path : resolve(path);
     if (this.path !== ":memory:") mkdirSync(dirname(this.path), {recursive: true, mode: 0o700});
     this.restrictDatabaseFiles(true);
-    this.db = new Database(this.path, {create: true});
+    if (this.path !== ":memory:") {
+      const leasePath = `${this.path}.lock`;
+      try {if (!lstatSync(leasePath).isFile()) throw new Error("Database lock must be a regular file.");}
+      catch (error) {if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;}
+      const lease = new Database(leasePath, {create: true});
+      try {
+        chmodSync(leasePath, 0o600);
+        // Process exit releases this separate lock without blocking state writes.
+        lease.exec("PRAGMA busy_timeout=0; BEGIN IMMEDIATE");
+        this.lease = lease;
+      } catch {lease.close(); throw new Error("Wavelength is already using this data directory. Quit the other instance and retry.");}
+    }
+    try {
+      this.db = new Database(this.path, {create: true});
+    } catch (error) {this.lease?.close(); throw error;}
     try {
       this.db.exec("PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS state (kind TEXT NOT NULL, id TEXT NOT NULL, json TEXT NOT NULL, PRIMARY KEY(kind, id))");
       this.restrictDatabaseFiles();
-    } catch (error) { this.db.close(); throw error; }
+    } catch (error) { this.db.close(); this.lease?.close(); throw error; }
   }
   put(kind: string, id: string, value: unknown) {
     this.db.query("INSERT INTO state VALUES (?, ?, ?) ON CONFLICT(kind, id) DO UPDATE SET json=excluded.json").run(kind, id, JSON.stringify(value));
@@ -74,5 +89,5 @@ export class Store {
     }
     for (const file of files) chmodSync(file, 0o600);
   }
-  close() {this.db.close();}
+  close() {this.db.close(); this.lease?.close();}
 }
