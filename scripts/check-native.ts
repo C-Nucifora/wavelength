@@ -14,7 +14,7 @@ try {
   await chmod(join(fixture, "bin/WebMusicBridge"), 0o755);
   await cp("tests/fixtures/pending-engine.ts", join(fixture, "engine/src/index.ts"));
   for (const command of [
-    ["/usr/bin/xcrun", "swiftc", "-parse-as-library", "-warnings-as-errors", "-target", target, ...sources, "native/Tests/DiscographyChecks.swift", "native/Tests/PendingChecks.swift", "native/Tests/HistoryChecks.swift", "native/Tests/ConnectionChecks.swift", "native/Tests/NativeChecks.swift", "-o", ".build/NativeChecks"],
+    ["/usr/bin/xcrun", "swiftc", "-j", "1", "-parse-as-library", "-warnings-as-errors", "-target", target, ...sources, "native/Tests/DiscographyChecks.swift", "native/Tests/PendingChecks.swift", "native/Tests/HistoryChecks.swift", "native/Tests/ConnectionChecks.swift", "native/Tests/EngineRaceChecks.swift", "native/Tests/NativeChecks.swift", "-o", ".build/NativeChecks"],
     [".build/NativeChecks", ...process.argv.slice(2)],
   ]) {
     const child = Bun.spawn(command, {stdout: "inherit", stderr: "inherit", env: {...process.env, WAVELENGTH_PENDING_FIXTURE: fixture}});

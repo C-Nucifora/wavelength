@@ -4,7 +4,13 @@ import Foundation
     @MainActor static func main() async throws {
         try await ConnectionChecks.run()
         try await HistoryChecks.run()
-        if let path = ProcessInfo.processInfo.environment["WAVELENGTH_PENDING_FIXTURE"] { try await DiscographyChecks.run(resources: URL(fileURLWithPath: path)); try await PendingChecks.run(resources: URL(fileURLWithPath: path)); try await HistoryChecks.run(resources: URL(fileURLWithPath: path)) }
+        if let path = ProcessInfo.processInfo.environment["WAVELENGTH_PENDING_FIXTURE"] {
+            let resources = URL(fileURLWithPath: path)
+            try await DiscographyChecks.run(resources: resources)
+            try await PendingChecks.run(resources: resources)
+            try await HistoryChecks.run(resources: resources)
+            try await EngineRaceChecks.run(bun: resources.appendingPathComponent("bin/bun"))
+        }
         let api = APIClient(baseURL: URL(string: "http://127.0.0.1:12345")!)
         api.token = "session-token"
         let authenticatedReady = try api.request("/api/ready")
