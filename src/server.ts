@@ -1,7 +1,7 @@
 import type {ArtistSearchResult, Draft, DraftTrack, MusicStatus, Provenance, SeedRequest} from "./types";
 import {Store} from "./store";
 import {Jobs, type MusicAdapter} from "./jobs";
-import {artistSearch, authorize, playlistName, selectTracks, validateSeed} from "./validation";
+import {artistSearch, authorize, playlistName, selectTracks, validateProvenanceKind, validateSeed} from "./validation";
 import {HistoryState} from "./history-state";
 import {summarizeHistory, validateHistoryQuery} from "./history-summary";
 import {HISTORY_LIMITS, type LibraryReadResult} from "./history-types";
@@ -28,9 +28,12 @@ const json = (value: unknown, status = 200) => Response.json(value, {status, hea
 export function createApp({engineToken, store, port, discovery, music, readLibraryHistory, now = Date.now}: Dependencies) {
   const token = engineToken || crypto.randomUUID() + crypto.randomUUID();
   const drafts = new Map<string, AbortController>();
-  const provenance = (id: number) => store.get<Provenance>("provenance", String(id));
+  const provenance = (id: number) => {
+    const value = store.get<unknown>("provenance", String(id));
+    return value === undefined ? undefined : validateProvenanceKind(value, id);
+  };
   const assess = (track: DraftTrack, includeAI: boolean) => {
-    const latest = provenance(track.artistId) || track.provenance;
+    const latest = validateProvenanceKind(provenance(track.artistId) ?? track.provenance, track.artist);
     if (!includeAI && latest.kind === "ai") throw new Error(`AI artists are off. ${track.artist} is now marked AI. Build a new draft to change your selection.`);
     return {...track, provenance: latest};
   };
@@ -67,6 +70,7 @@ export function createApp({engineToken, store, port, discovery, music, readLibra
     }
   }
   const preflights = new Map<string, {key: string; checkedAt: number; generation?: string; unavailable?: number}>();
+  let provenanceRevision = 0;
   const selectionKey = (input: Record<string, unknown>) => JSON.stringify([input.draftId, input.trackIds, input.includeAI]);
   for (const draft of store.all<Draft>("draft")) if (draft.status === "building") {
     draft.status = "failed";
@@ -181,9 +185,10 @@ export function createApp({engineToken, store, port, discovery, music, readLibra
         return json(draft);
       }
       if (path === "/api/provenance") {
-        if (!Number.isSafeInteger(input.artistId) || Number(input.artistId) <= 0 || !["ai", "human", "unknown"].includes(String(input.kind))) throw new Error("Choose an artist and a supported provenance label.");
+        if (!Number.isSafeInteger(input.artistId) || Number(input.artistId) <= 0 || typeof input.kind !== "string" || !["ai", "human", "unknown"].includes(input.kind)) throw new Error("Choose an artist and a supported provenance label.");
         if (input.evidence !== undefined && (typeof input.evidence !== "string" || input.evidence.length > 2000)) throw new Error("Evidence must be text, up to 2000 characters.");
         store.put("provenance", String(input.artistId), {kind: input.kind, evidence: typeof input.evidence === "string" && input.evidence.trim() ? [input.evidence.trim()] : [], note: "Personal classification, not independently verified"});
+        provenanceRevision++;
         preflights.clear();
         return json({ok: true});
       }
@@ -195,8 +200,10 @@ export function createApp({engineToken, store, port, discovery, music, readLibra
         if (path === "/api/preflight") {
           if (!music.inspectTracks) throw new Error("Library inspection is unavailable.");
           const release = acquireMusicRead("preflight");
+          const revision = provenanceRevision;
           let result;
           try {result = await music.inspectTracks(tracks);} finally {release();}
+          if (revision !== provenanceRevision) throw new Error("Artist classifications changed during the library check. Check this selection again.");
           const id = crypto.randomUUID();
           if (preflights.size >= 64) preflights.delete(preflights.keys().next().value!);
           if (music.kind === "web-session" && !result.generation) throw new Error("Check the Apple Music connection again.");
